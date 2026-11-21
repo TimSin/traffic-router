@@ -15,6 +15,10 @@ Open the page, enter a HERE API key under Settings, and enter a start and destin
 
 On an iPhone, open the GitHub Pages address in Safari and choose Share, then Add to Home Screen.
 
+## Road preference
+
+Under Settings, "Road preference" can favour smaller roads. It caps the speed HERE assumes on main roads (functional classes 1 and 2, and class 3 on the strong setting) for the extra routes the app requests, and adds a cost per kilometre of main road when choosing between routes. The plain fastest route is always requested without caps, so its time is real; times for capped routes may be overstated where they use main roads.
+
 ## Base map
 
 The map background uses Tracestrack Topo by default. It needs a Tracestrack API key, entered under Settings; Tracestrack's free plan is for non-commercial use and allows 100,000 tile requests a month. Until a key is entered, OpenStreetMap's standard tiles are shown. HERE's own tiles can also be chosen, and count against the HERE allowance. OpenStreetMap's tiles must be requested with a Referer header, so they load from the hosted page but not from a copy of the file opened directly from disk.
