@@ -80,6 +80,20 @@ tbody tr.sel{outline:2px solid var(--blue);outline-offset:-2px}
 .cog{position:fixed;top:12px;right:12px;z-index:1100;width:48px;height:48px;padding:0;border-radius:50%;display:grid;place-items:center;
   background:var(--panel);color:var(--ink);border:1px solid var(--line);box-shadow:0 2px 10px rgba(0,0,0,.25)}
 .cog[aria-pressed=true]{background:var(--blue);border-color:var(--blue);color:#fff}
+.recalc{right:auto;left:412px}
+.recalc:disabled{opacity:.5;cursor:default}
+@media(prefers-reduced-motion:no-preference){.recalc.busy svg{animation:spin 1s linear infinite}}
+@keyframes spin{to{transform:rotate(360deg)}}
+.favs{display:flex;flex-wrap:wrap;gap:8px}
+.favs button{min-height:36px;padding:0 12px;border-radius:18px;font-size:14px;display:inline-flex;align-items:center;gap:6px}
+.favs button.add{color:var(--muted);border-style:dashed}
+.favsave{display:flex;flex-direction:column;gap:8px;border:1px solid var(--line);border-radius:10px;padding:10px}
+.seg{display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{border:0;border-radius:0;min-height:40px;font-size:14px}
+.seg button[aria-pressed=true]{background:var(--blue);color:#fff}
+button.primary-sm{background:var(--blue);border-color:var(--blue);color:#fff;font-weight:600}
+.favitem{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid var(--line);font-size:14px}
+.favitem span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 @media(prefers-reduced-motion:no-preference){.cog svg{transition:transform .3s}.cog[aria-pressed=true] svg{transform:rotate(60deg)}}
 #keymsg.err{color:var(--red)}
 #form{display:flex;flex-direction:column;gap:12px}
@@ -116,6 +130,7 @@ button.icon.pick[aria-pressed=true]{background:var(--blue);color:#fff}
   .sheet-bar .grab{position:absolute;top:6px;left:50%;width:40px;height:4px;margin-left:-20px;border-radius:2px;background:var(--line)}
   aside.collapsed .sheet-bar .chev{transform:rotate(180deg)}
   .leaflet-control-zoom{display:none}
+  .recalc{left:12px}
   #summary{flex:1;font-size:14px;line-height:1.3}
   .intro{display:none}
 }
@@ -143,9 +158,19 @@ button.icon.pick[aria-pressed=true]{background:var(--blue);color:#fff}
       <h3>Base map</h3>
       <label for="basemap">Map background</label>
       <select id="basemap">
+        <option value="tracestrack">Tracestrack Topo</option>
         <option value="osm">OpenStreetMap</option>
         <option value="here">HERE (counts against your allowance)</option>
       </select>
+      <div id="ttbox" style="margin-top:10px">
+        <label for="ttkey">Tracestrack API key</label>
+        <input id="ttkey" type="password" autocomplete="off" spellcheck="false">
+        <p class="muted" id="basenote" style="margin-top:6px"></p>
+      </div>
+    </div>
+    <div>
+      <h3>Favourites</h3>
+      <div id="favlist"></div>
     </div>
     <div>
       <h3>Free allowance limit</h3>
@@ -178,6 +203,15 @@ button.icon.pick[aria-pressed=true]{background:var(--blue);color:#fff}
       <span class="dot end" aria-hidden="true"></span>
       <div class="field"><input id="to" placeholder="Destination" aria-label="Destination" autocomplete="off">
         <button type="button" class="icon pick" data-for="to" aria-pressed="false" aria-label="Pick destination on map" title="Pick on map"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.1-7-11.5a7 7 0 0 1 14 0C19 14.9 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg></button></div>
+    </div>
+    <div class="favs" id="favs" aria-label="Favourites"></div>
+    <div class="favsave" id="favsave" hidden>
+      <div class="seg" role="group" aria-label="Location to save">
+        <button type="button" data-which="from" aria-pressed="true">Start</button>
+        <button type="button" data-which="to" aria-pressed="false">Destination</button>
+      </div>
+      <div class="row"><input id="favname" placeholder="Name, for example Home" aria-label="Favourite name" autocomplete="off">
+        <button type="button" id="favok" class="primary-sm">Save</button><button type="button" id="favcancel">Cancel</button></div>
     </div>
     <details class="opts">
       <summary><span id="optsSummary"></span><svg class="chev" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></summary>
@@ -219,6 +253,7 @@ button.icon.pick[aria-pressed=true]{background:var(--blue);color:#fff}
   </div>
 </aside>
 <div id="map"></div>
+<button type="button" id="recalc" class="cog recalc" aria-label="Recalculate route" title="Recalculate with the same inputs" disabled><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg></button>
 <button type="button" id="cog" class="cog" aria-label="Settings" aria-pressed="false" aria-controls="settings"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
@@ -258,8 +293,68 @@ $('th').addEventListener('change', optsSummary);
 $('extra').addEventListener('input', optsSummary);
 optsSummary();
 
+// ---------- Favourites ----------
+// Saved as name and coordinates in this browser's local storage.
+let favs = [];
+try { favs = JSON.parse(localStorage.getItem('favourites') || '[]'); } catch { favs = []; }
+const saveFavs = () => { try { localStorage.setItem('favourites', JSON.stringify(favs)); } catch {} };
+const esc = t => t.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+let lastField = null;
+for (const w of ['from', 'to']) $(w).addEventListener('focus', () => { lastField = w; });
+function renderFavs(){
+  $('favs').innerHTML = favs.map((f, i) => `<button type="button" data-i="${i}"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg>${esc(f.name)}</button>`).join('')
+    + '<button type="button" class="add" id="favadd">+ Save favourite</button>';
+  $('favlist').innerHTML = favs.length
+    ? favs.map((f, i) => `<div class="favitem"><span>${esc(f.name)}</span><button type="button" data-del="${i}">Delete</button></div>`).join('')
+    : '<p class="muted">No favourites yet. Use "+ Save favourite" under the start and destination.</p>';
+}
+$('favs').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  if (b.id === 'favadd') return openFavSave();
+  const f = favs[+b.dataset.i];
+  const w = lastField || ($('from').value.trim() ? 'to' : 'from');
+  $(w).value = f.name;
+  fieldPoint[w] = { text: f.name, lat: f.lat, lng: f.lng };
+  setMark(w, f.lat, f.lng);
+  lastField = null;
+});
+$('favlist').addEventListener('click', e => {
+  const b = e.target.closest('button[data-del]'); if (!b) return;
+  favs.splice(+b.dataset.del, 1); saveFavs(); renderFavs();
+});
+let favWhich = 'from';
+function setFavWhich(w){
+  favWhich = w;
+  document.querySelectorAll('#favsave .seg button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.which === w)));
+  const t = $(w).value.trim();
+  $('favname').value = t && !/^-?\d+(\.\d+)?\s*,/.test(t) ? t : '';
+}
+function openFavSave(){
+  if (!$('from').value.trim() && !$('to').value.trim()) { status('Enter a start or destination first, then save it as a favourite.', true); return; }
+  $('favsave').hidden = false;
+  setFavWhich($('from').value.trim() ? (lastField === 'to' && $('to').value.trim() ? 'to' : 'from') : 'to');
+  $('favname').focus();
+}
+document.querySelectorAll('#favsave .seg button').forEach(b => b.addEventListener('click', () => setFavWhich(b.dataset.which)));
+$('favcancel').addEventListener('click', () => { $('favsave').hidden = true; });
+$('favok').addEventListener('click', async () => {
+  const name = $('favname').value.trim(), text = $(favWhich).value.trim();
+  if (!name) { status('Give the favourite a name.', true); return; }
+  if (!text) { status('That field is empty.', true); return; }
+  if (!key() && !/^-?\d/.test(text)) { showSettings(true, 'Enter your HERE API key first, so the address can be looked up.'); return; }
+  try {
+    const p = await locate(text, favWhich);
+    favs = favs.filter(f => f.name.toLowerCase() !== name.toLowerCase());
+    favs.push({ name, lat: p.lat, lng: p.lng });
+    saveFavs(); renderFavs();
+    $('favsave').hidden = true;
+    status('Saved "' + name + '" as a favourite.');
+  } catch (err) { status('Could not save the favourite: ' + err.message, true); }
+});
+renderFavs();
+
 // ---------- Reload and version ----------
-const APP_VERSION = '2026-11-21.8';
+const APP_VERSION = '2026-11-21.9';
 $('version').textContent = 'Version ' + APP_VERSION + '.';
 // Re-requesting the page with cache: 'reload' replaces the browser's cached copy before reloading.
 $('reload').addEventListener('click', () => {
@@ -282,15 +377,19 @@ $('settingsDone').addEventListener('click', () => showSettings(false));
 // ---------- Free allowance limit ----------
 // Counts every request this page makes, by service, for the current UTC calendar month and UTC day.
 // A request is refused before it is sent if it would take the count past the chosen share of the allowance.
-const ALLOW = { routing: 30000, flow: 5000, geocode: 30000, tiles: 30000 };   // Base plan free allowances per month
+const ALLOW = { routing: 30000, flow: 5000, geocode: 30000, tiles: 30000, ttiles: 100000 };   // Monthly free allowances; ttiles is Tracestrack's free plan
+const HERE_SVCS = ['routing', 'flow', 'geocode', 'tiles'];
 const DAILY = 1000;                                                           // Limited plan requests per day, all services
-const NAMES = { routing: 'Routing', flow: 'Traffic flow', geocode: 'Geocoding', tiles: 'Map tiles' };
+const NAMES = { routing: 'Routing', flow: 'Traffic flow', geocode: 'Geocoding', tiles: 'HERE map tiles', ttiles: 'Tracestrack tiles' };
 let memUsage = null, storageOK = true;
 const monthKey = () => new Date().toISOString().slice(0, 7);
 const dayKey = () => new Date().toISOString().slice(0, 10);
 const plan = () => $('plan').value;
 const share = () => Math.min(100, Math.max(10, +$('pct').value || 90)) / 100;
 const sum = c => Object.values(c).reduce((a, b) => a + b, 0);
+const hereSum = c => HERE_SVCS.reduce((a, k) => a + (c[k] || 0), 0);
+// Which services' meters apply depends on the base map in use.
+const shown = k => k === 'tiles' ? basemap() === 'here' : k === 'ttiles' ? basemap() === 'tracestrack' && !!ttkey() : true;
 const reqs = n => n + (n === 1 ? ' request' : ' requests');
 
 function loadUsage(){
@@ -311,10 +410,14 @@ function saveUsage(u){
 function checkSpend(need){
   const u = loadUsage();
   if (plan() === 'limited') {
-    const limit = Math.floor(DAILY * share()), left = limit - sum(u.day.c), n = sum(need);
-    return n > left ? 'This needs up to ' + reqs(n) + ', and ' + Math.max(0, left) + ' ' + (left === 1 ? 'is' : 'are') + ' left under today\'s limit of ' + limit + '.' : null;
+    const n = hereSum(need);
+    if (n) {
+      const limit = Math.floor(DAILY * share()), left = limit - hereSum(u.day.c);
+      if (n > left) return 'This needs up to ' + reqs(n) + ', and ' + Math.max(0, left) + ' ' + (left === 1 ? 'is' : 'are') + ' left under today\'s HERE limit of ' + limit + '.';
+    }
   }
   for (const [s, n] of Object.entries(need)) {
+    if (!n || (plan() === 'limited' && s !== 'ttiles')) continue;
     const limit = Math.floor(ALLOW[s] * share()), left = limit - (u.month.c[s] || 0);
     if (n > left) return NAMES[s] + ': this needs up to ' + reqs(n) + ', and ' + Math.max(0, left) + ' ' + (left === 1 ? 'is' : 'are') + ' left under this month\'s limit of ' + limit.toLocaleString('en-GB') + '.';
   }
@@ -338,12 +441,12 @@ function renderUsage(){
   requestAnimationFrame(() => {
     renderQueued = false;
     const u = loadUsage();
-    $('meters').innerHTML = plan() === 'limited'
-      ? meter('All requests today', sum(u.day.c), Math.floor(DAILY * share()))
-      : Object.keys(ALLOW).filter(s => s !== 'tiles' || basemap() === 'here').map(s => meter(NAMES[s] + ' this month', u.month.c[s] || 0, Math.floor(ALLOW[s] * share()))).join('');
-    const ratios = plan() === 'limited'
-      ? [['All requests today', sum(u.day.c) / Math.floor(DAILY * share())]]
-      : Object.keys(ALLOW).filter(k => k !== 'tiles' || basemap() === 'here').map(k => [NAMES[k], (u.month.c[k] || 0) / Math.floor(ALLOW[k] * share())]);
+    const monthly = Object.keys(ALLOW).filter(k => shown(k) && (plan() !== 'limited' || k === 'ttiles'));
+    const dailyLimit = Math.floor(DAILY * share());
+    $('meters').innerHTML = (plan() === 'limited' ? meter('All HERE requests today', hereSum(u.day.c), dailyLimit) : '')
+      + monthly.map(k => meter(NAMES[k] + ' this month', u.month.c[k] || 0, Math.floor(ALLOW[k] * share()))).join('');
+    const ratios = (plan() === 'limited' ? [['All HERE requests today', hereSum(u.day.c) / dailyLimit]] : [])
+      .concat(monthly.map(k => [NAMES[k], (u.month.c[k] || 0) / Math.floor(ALLOW[k] * share())]));
     const [worstName, worst] = ratios.reduce((a, b) => b[1] > a[1] ? b : a);
     const warn = $('usagewarn');
     warn.hidden = worst < 0.8;
@@ -369,38 +472,56 @@ for (const id of ['plan', 'pct']) $(id).addEventListener('change', () => {
 renderUsage();
 
 // ---------- Map ----------
-const map = L.map('map', { preferCanvas: true }).setView([51.507, -0.1276], 11);
+const map = L.map('map', { preferCanvas: true, zoomControl: false }).setView([51.507, -0.1276], 11);
+L.control.zoom({ position: 'bottomright' }).addTo(map);
 let tiles = null, tilesWarned = false;
 // Tile layer that refuses to request a tile once the tile limit is reached, showing a blank square instead.
 const GuardedTiles = L.TileLayer.extend({
   createTile(coords, done){
-    if (checkSpend({ tiles: 1 })) {
+    const svc = this.options.svc;
+    if (checkSpend({ [svc]: 1 })) {
       const el = document.createElement('div');
       setTimeout(() => done(null, el), 0);
       if (!tilesWarned) { tilesWarned = true; status('Map tiles have stopped loading because the tile limit has been reached. Route comparisons still work.', true); }
       return el;
     }
-    spend('tiles');
+    spend(svc);
     return L.TileLayer.prototype.createTile.call(this, coords, done);
   }
 });
 // OpenStreetMap's standard tiles are free for light use but must be requested with a Referer header,
 // which browsers send from a hosted page but not from a file opened directly from disk.
 const basemap = () => $('basemap').value;
-const savedBase = store.get('hereBasemap');
+const savedBase = store.get('basemap');
 if (savedBase) $('basemap').value = savedBase;
-$('basemap').addEventListener('change', () => { store.set('hereBasemap', basemap()); setTiles(); renderUsage(); });
+const ttkey = () => $('ttkey').value.trim();
+const savedTt = store.get('ttKey');
+if (savedTt) $('ttkey').value = savedTt;
+function persistTt(){ store.set('ttKey', $('remember').checked && ttkey() ? ttkey() : null); }
+$('basemap').addEventListener('change', () => { store.set('basemap', basemap()); setTiles(); renderUsage(); });
+$('ttkey').addEventListener('change', () => { persistTt(); setTiles(); renderUsage(); });
+$('remember').addEventListener('change', persistTt);
 map.attributionControl.addAttribution('Routing and traffic &copy; HERE');
 function setTiles(){
   if (tiles) { map.removeLayer(tiles); tiles = null; }
-  if (basemap() === 'osm') {
+  const b = basemap();
+  $('ttbox').hidden = b !== 'tracestrack';
+  $('basenote').textContent = ttkey()
+    ? 'Tracestrack\'s free plan is for non-commercial use, with 100,000 tile requests a month.'
+    : 'Enter a Tracestrack API key to show the topo map. OpenStreetMap is shown until then. Keys are at tracestrack.com.';
+  if (b === 'tracestrack' && ttkey()) {
+    tiles = new GuardedTiles('https://tile.tracestrack.com/topo__/{z}/{x}/{y}.png?key=' + encodeURIComponent(ttkey()), { svc: 'ttiles', maxZoom: 19,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors. Tiles courtesy of <a href="https://www.tracestrack.com/">Tracestrack Maps</a>' }).addTo(map);
+    return;
+  }
+  if (b === 'osm' || b === 'tracestrack') {
     tiles = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19,
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' }).addTo(map);
     return;
   }
   if (!key()) return;
   tiles = new GuardedTiles('https://maps.hereapi.com/v3/base/mc/{z}/{x}/{y}/png?style=lite.day&size=512&apiKey=' + encodeURIComponent(key()),
-    { tileSize: 512, zoomOffset: -1, maxZoom: 19, attribution: '&copy; HERE' }).addTo(map);
+    { svc: 'tiles', tileSize: 512, zoomOffset: -1, maxZoom: 19, attribution: '&copy; HERE' }).addTo(map);
 }
 setTiles();
 
@@ -494,7 +615,11 @@ async function api(url, svc){
   }
   return j;
 }
-async function locate(text){
+// Points already known for each field (from a favourite), used while the field text is unchanged.
+const fieldPoint = { from: null, to: null };
+async function locate(text, which){
+  const fp = which && fieldPoint[which];
+  if (fp && fp.text === text) return { lat: fp.lat, lng: fp.lng };
   const m = text.trim().match(/^(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)$/);
   if (m) return { lat: +m[1], lng: +m[2] };
   const j = await api('https://geocode.search.hereapi.com/v1/geocode?q=' + encodeURIComponent(text) + '&in=countryCode:GBR&limit=1&apiKey=' + encodeURIComponent(key()), 'geocode');
@@ -588,19 +713,24 @@ function status(msg, err){
   $('summary').textContent = msg;
   if (err) setSheet(true);
 }
-$('form').addEventListener('submit', async e => {
-  e.preventDefault();
+let lastInputs = null;
+$('form').addEventListener('submit', e => { e.preventDefault(); run(); });
+async function run(){
   if (!key()) { showSettings(true, 'Enter your HERE API key first.'); return; }
   if (!$('from').value.trim() || !$('to').value.trim()) { status('Enter a start and a destination.', true); return; }
   const th = +$('th').value, extraS = Math.max(0, +$('extra').value || 0) * 60;
   const isCoord = v => /^\s*-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?\s*$/.test(v);
-  const geocodes = [$('from').value, $('to').value].filter(v => !isCoord(v)).length;
+  const known = w => fieldPoint[w] && fieldPoint[w].text === $(w).value;
+  const geocodes = ['from', 'to'].filter(w => !isCoord($(w).value) && !known(w)).length;
   const over = checkSpend({ geocode: geocodes, routing: 1 + ROUNDS, flow: 1 });
   if (over) { status('Comparison not started. ' + over, true); return; }
-  $('go').disabled = true;
+  $('go').disabled = true; $('recalc').disabled = true; $('recalc').classList.add('busy');
   try {
     status('Finding locations…');
-    const o = await locate($('from').value), d = await locate($('to').value);
+    const o = await locate($('from').value, 'from'), d = await locate($('to').value, 'to');
+    // Remember the resolved points so a recalculation does not geocode again.
+    lastInputs = { from: $('from').value, to: $('to').value, th: $('th').value, extra: $('extra').value,
+                   pts: { from: { text: $('from').value, ...o }, to: { text: $('to').value, ...d } } };
     setMark('from', o.lat, o.lng); setMark('to', d.lat, d.lng);
 
     status('Getting HERE routes…');
@@ -642,8 +772,15 @@ $('form').addEventListener('submit', async e => {
   } catch (err) {
     status(err.message || String(err), true);
   } finally {
-    $('go').disabled = false;
+    $('go').disabled = false; $('recalc').classList.remove('busy'); $('recalc').disabled = !lastInputs;
   }
+}
+$('recalc').addEventListener('click', () => {
+  if (!lastInputs) return;
+  $('from').value = lastInputs.from; $('to').value = lastInputs.to;
+  $('th').value = lastInputs.th; $('extra').value = lastInputs.extra; optsSummary();
+  fieldPoint.from = lastInputs.pts.from; fieldPoint.to = lastInputs.pts.to;
+  run();
 });
 
 // ---------- Rendering ----------
