@@ -15,6 +15,10 @@ Open the page, enter a HERE API key under "HERE API key", and enter a start and 
 
 On an iPhone, open the GitHub Pages address in Safari and choose Share, then Add to Home Screen.
 
+## Base map
+
+The map background uses OpenStreetMap's standard tiles by default, so only routing, traffic and geocoding requests count against the HERE allowance. HERE's own tiles can be chosen under "Base map". OpenStreetMap's tiles must be requested with a Referer header, so they load from the hosted page but not from a copy of the file opened directly from disk; use the HERE base map in that case.
+
 ## Free allowance limit
 
 The page counts its own requests per service in the browser's local storage and refuses a request that would pass the chosen share of HERE's free allowance. Requests made from other browsers or devices are not included in the count.
