@@ -23,6 +23,10 @@ The map background uses Tracestrack Topo by default. It needs a Tracestrack API 
 
 Locations can be saved as favourites with "+ Save favourite" under the start and destination. They are kept as names and coordinates in the browser's local storage and can be deleted under Settings. The button at the top left of the map runs the last comparison again with the same inputs, using live traffic at that moment.
 
+## Location and screen
+
+The location button under the settings cog shows your live position on the map. The first tap shows the position and keeps the map centred on it; dragging the map stops the centring, and tapping again re-centres. Tapping while it is centred turns it off. "Keep the screen on" under Settings stops the phone dimming and locking while the app is open, using the Screen Wake Lock API (iOS 18.4 or later for home-screen apps).
+
 ## Free allowance limit
 
 The page counts its own requests per service in the browser's local storage and refuses a request that would pass the chosen share of HERE's free allowance. Requests made from other browsers or devices are not included in the count.
