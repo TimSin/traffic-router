@@ -81,12 +81,24 @@ tbody tr.sel{outline:2px solid var(--blue);outline-offset:-2px}
 .recalc{right:auto;left:412px}
 .locbtn{top:72px}
 .locbtn.tracking{color:var(--blue)}
-.check{display:flex;align-items:center;gap:10px;font-size:15px;color:var(--ink);margin:0}
+.check{display:flex;align-items:center;gap:10px;font-size:15px;color:var(--ink);margin:0 0 8px}
+.warnline{font-size:14px;color:#b45309;margin:0}
+.warnline.closed{color:var(--red);font-weight:600}
+.tag.warn{background:#b45309}
+.tag.closed{background:var(--red)}
+.favs button.short{border-color:var(--blue);color:var(--blue)}
+.banner{position:fixed;top:12px;left:72px;right:72px;z-index:1150;background:var(--panel);color:var(--ink);border:1px solid var(--blue);border-radius:12px;
+  padding:12px;box-shadow:0 4px 18px rgba(0,0,0,.3);display:flex;flex-direction:column;gap:10px;font-size:14px;max-width:520px;margin:0 auto}
+.banner[hidden]{display:none}
+.logitem{padding:6px 0;border-bottom:1px solid var(--line);font-size:13px}
+@media(min-width:801px){.banner{left:472px}}
+#map.darktiles .leaflet-tile-pane{filter:invert(1) hue-rotate(180deg) brightness(.85) contrast(.9) saturate(.7)}
 .check input{width:22px;height:22px;min-height:0;margin:0;flex:none}
 .recalc:disabled{opacity:.5;cursor:default}
 @media(prefers-reduced-motion:no-preference){.recalc.busy svg{animation:spin 1s linear infinite}}
 @keyframes spin{to{transform:rotate(360deg)}}
 .favs{display:flex;flex-wrap:wrap;gap:8px}
+.favs[hidden]{display:none}
 .favs button{min-height:36px;padding:0 12px;border-radius:18px;font-size:14px;display:inline-flex;align-items:center;gap:6px}
 .favs button.add{color:var(--muted);border-style:dashed}
 .favsave{display:flex;flex-direction:column;gap:8px;border:1px solid var(--line);border-radius:10px;padding:10px}
@@ -121,6 +133,7 @@ button.icon.pick[aria-pressed=true]{background:var(--blue);color:#fff}
 .opts[open] .chev{transform:rotate(180deg)}
 .chev{flex:none;transition:transform .2s}
 #status:empty{display:none}
+.closedtxt{color:var(--red);font-weight:600}
 #results{display:flex;flex-direction:column;gap:12px}
 #results[hidden]{display:none}
 #verdict{font-size:15px;line-height:1.4}
@@ -173,6 +186,7 @@ tr.over td{opacity:.45}
   <p id="status" role="status"></p>
   <section id="results" hidden>
     <p id="verdict"></p>
+    <p id="tflwarn" class="warnline" hidden></p>
     <div class="cmp" id="cards"></div>
     <div class="legend">
       <span><i style="background:#f2c200"></i>Light</span><span><i style="background:#f08a00"></i>Moderate to heavy</span>
@@ -183,6 +197,7 @@ tr.over td{opacity:.45}
       <table><thead><tr><th>Route</th><th>Time</th><th>Distance</th><th>Congested</th></tr></thead><tbody id="tbody"></tbody></table>
       <p class="muted" style="margin-top:6px">Tap a route to show it on the map. Greyed routes are over your extra-time limit.</p>
     </details>
+    <button type="button" id="saveshort" class="linkbtn">Save this journey as a shortcut</button>
   </section>
   <form id="form">
     <div class="trip">
@@ -195,6 +210,7 @@ tr.over td{opacity:.45}
       <div class="field"><input id="to" placeholder="Destination" aria-label="Destination" autocomplete="off">
         <button type="button" class="icon pick" data-for="to" aria-pressed="false" aria-label="Pick destination on map" title="Pick on map"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.1-7-11.5a7 7 0 0 1 14 0C19 14.9 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg></button></div>
     </div>
+    <div class="favs" id="shortcuts" aria-label="Shortcuts"></div>
     <div class="favs" id="favs" aria-label="Favourites"></div>
     <div class="favsave" id="favsave" hidden>
       <div class="seg" role="group" aria-label="Location to save">
@@ -248,6 +264,42 @@ tr.over td{opacity:.45}
       <p class="muted" id="roaddesc" style="margin-top:6px"></p>
     </div>
     <div>
+      <h3>Charges</h3>
+      <label class="check"><input id="showcharges" type="checkbox" checked> Show charges on each route</label>
+      <label class="check"><input id="avoidccz" type="checkbox"> Avoid the Congestion Charge zone</label>
+      <label class="check"><input id="avoidtolls" type="checkbox"> Avoid charged tunnels and toll roads</label>
+      <p class="muted">Charges come from HERE and are estimates. Showing them makes each route request count as two HERE requests.</p>
+    </div>
+    <div>
+      <h3>TfL disruptions</h3>
+      <label class="check"><input id="tflon" type="checkbox" checked> Show TfL road disruptions and route around closures</label>
+      <label for="tflkey" style="margin-top:8px">TfL app key (optional)</label>
+      <input id="tflkey" type="password" autocomplete="off" spellcheck="false">
+      <p class="muted" style="margin-top:6px">TfL's data is free and doesn't count against HERE. The app fetches it at most every 5 minutes. Without a key TfL limits anonymous use, so the app stops at 400 requests a day; a free key from api-portal.tfl.gov.uk removes that.</p>
+    </div>
+    <div>
+      <h3>Re-check while driving</h3>
+      <label class="check"><input id="autocheck" type="checkbox"> Re-check the route while driving</label>
+      <label for="autoint" style="margin-top:8px">Check every</label>
+      <select id="autoint"><option value="5">5 minutes</option><option value="10" selected>10 minutes</option><option value="15">15 minutes</option></select>
+      <p class="muted" id="autonote" style="margin-top:6px"></p>
+    </div>
+    <div>
+      <h3>Dark map</h3>
+      <label for="darkmap">Darken the map</label>
+      <select id="darkmap"><option value="off">Never</option><option value="phone" selected>When the phone is in dark mode</option><option value="sunset">After sunset</option></select>
+    </div>
+    <div>
+      <h3>Shortcuts</h3>
+      <div id="shortlist"></div>
+    </div>
+    <div>
+      <h3>Journey log</h3>
+      <p class="muted" id="logsummary"></p>
+      <div id="loglist"></div>
+      <div class="favbtns" style="margin-top:8px"><button type="button" id="logcopy">Copy as CSV</button><button type="button" id="logclear">Clear log</button></div>
+    </div>
+    <div>
       <h3>Base map</h3>
       <label for="basemap">Map background</label>
       <select id="basemap">
@@ -289,7 +341,8 @@ tr.over td{opacity:.45}
       <p class="muted" style="margin-top:6px">Fetches the latest version of the page. Your key and settings are kept. <span id="version"></span></p>
     </div>
   </section>
-<button type="button" id="recalc" class="cog recalc" aria-label="Recalculate route" title="Recalculate with the same inputs" disabled><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg></button>
+<div id="banner" class="banner" hidden role="alert"><p id="bannertext"></p><div class="favbtns"><button type="button" id="bannerno">Dismiss</button><button type="button" id="banneryes" class="primary-sm">Switch</button></div></div>
+<button type="button" id="recalc" class="cog recalc" aria-label="Recalculate route" title="Recalculate from your position, or with the same inputs" disabled><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg></button>
 <button type="button" id="mylocation" class="cog locbtn" aria-label="Show my location" aria-pressed="false" title="Show my location"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg></button>
 <button type="button" id="cog" class="cog" aria-label="Settings" aria-pressed="false" aria-controls="settings"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
 
@@ -314,12 +367,23 @@ const store = {
   get(k){ try { return localStorage.getItem(k); } catch { return null; } },
   set(k,v){ try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k,v); } catch {} }
 };
+// Simple settings remembered in this browser: checkboxes as '1'/'0', selects as their value.
+for (const id of ['showcharges', 'avoidccz', 'avoidtolls', 'tflon', 'autocheck', 'autoint', 'darkmap']) {
+  const el = document.getElementById(id), v = store.get('set_' + id);
+  if (v !== null) { if (el.type === 'checkbox') el.checked = v === '1'; else el.value = v; }
+  el.addEventListener('change', () => store.set('set_' + id, el.type === 'checkbox' ? (el.checked ? '1' : '0') : el.value));
+}
 const saved = store.get('hereKey');
 if (saved) { $('key').value = saved; $('remember').checked = true; }
 const key = () => $('key').value.trim();
 function persistKey(){ store.set('hereKey', $('remember').checked && key() ? key() : null); }
 $('key').addEventListener('change', () => { persistKey(); setTiles(); });
 $('remember').addEventListener('change', persistKey);
+const tflkey = () => $('tflkey').value.trim();
+if (store.get('tflKey')) $('tflkey').value = store.get('tflKey');
+function persistTfl(){ store.set('tflKey', $('remember').checked && tflkey() ? tflkey() : null); }
+$('tflkey').addEventListener('change', () => { persistTfl(); tflCache.t = 0; });
+$('remember').addEventListener('change', persistTfl);
 $('key').addEventListener('input', () => { $('keymsg').textContent = ''; $('keymsg').className = 'muted'; });
 
 // ---------- Road preference setting ----------
@@ -405,7 +469,7 @@ $('favok').addEventListener('click', async () => {
 renderFavs();
 
 // ---------- Reload and version ----------
-const APP_VERSION = '2026-11-21.14';
+const APP_VERSION = '2026-11-21.15';
 $('version').textContent = 'Version ' + APP_VERSION + '.';
 // Re-requesting the page with cache: 'reload' replaces the browser's cached copy before reloading.
 $('reload').addEventListener('click', () => {
@@ -420,7 +484,7 @@ function showSettings(on){
   $('cog').setAttribute('aria-pressed', String(on));
   $('keymsg').textContent = !key() ? 'Enter your HERE API key to use the app.' : '';
   $('keymsg').className = !key() ? 'muted err' : 'muted';
-  if (on) $('settingsDone').focus(); else $('cog').focus();
+  if (on) { autoNote(); renderLog(); $('settingsDone').focus(); } else $('cog').focus();
 }
 $('cog').addEventListener('click', () => showSettings($('settings').hidden));
 $('settingsDone').addEventListener('click', () => showSettings(false));
@@ -651,6 +715,7 @@ function onFix(p){
     meDot = L.circleMarker(ll, { radius: 7, color: '#fff', weight: 3, fillColor: '#1f6feb', fillOpacity: 1, interactive: false }).addTo(map);
   } else { meAcc.setLatLng(ll).setRadius(fix.acc); meDot.setLatLng(ll); meDot.bringToFront(); }
   if (follow) map.setView(ll, Math.max(map.getZoom(), 15));
+  tripFix(fix);
 }
 function startTracking(){
   if (!navigator.geolocation) { status('This browser cannot provide your location.', true); return; }
@@ -769,16 +834,32 @@ const ROADPREF = {
 };
 const roadPref = () => ROADPREF[$('roadpref').value] || ROADPREF.off;
 // capped: apply the road preference's speed caps to this request (never to the plain fastest-route request).
-async function getRoutes(o, d, alts, avoid, capped){
+// Charges: HERE counts a request that returns tolls as two transactions, so the second one is counted here too.
+const wantCharges = () => $('showcharges').checked;
+async function getRoutes(o, d, alts, avoid, capped, noCharges){
+  const tolls = wantCharges() && !noCharges;
   let u = 'https://router.hereapi.com/v8/routes?transportMode=car&origin=' + o.lat + ',' + o.lng + '&destination=' + d.lat + ',' + d.lng +
-          '&return=polyline,summary&spans=functionalClass&alternatives=' + alts + '&apiKey=' + encodeURIComponent(key());
+          '&return=polyline,summary' + (tolls ? ',tolls&currency=GBP' : '') + '&spans=functionalClass&alternatives=' + alts + '&apiKey=' + encodeURIComponent(key());
   if (avoid.length) u += '&avoid[areas]=' + encodeURIComponent(avoid.join('|'));
+  if ($('avoidtolls').checked) u += '&avoid[features]=tollRoad';
+  if ($('avoidccz').checked) u += '&avoid[zoneCategories]=congestionPricing';
   if (capped && roadPref().caps) u += '&vehicle[speedCapPerFc]=' + roadPref().caps;
+  if (tolls) {
+    const over = checkSpend({ routing: 2 });
+    if (over) throw new Error('Request not sent. ' + over);
+    spend('routing');
+  }
   const j = await api(u, 'routing');
   return (j.routes || []).map(r => {
-    let pts = [], dur = 0, len = 0, main = 0;
+    let pts = [], dur = 0, len = 0, main = 0, charge = tolls ? 0 : null;
+    const chargeNames = [];
     for (const s of r.sections) {
       const p = decodeFP(s.polyline);
+      // Each toll can offer several fares (for example by payment method); the cheapest is used as the estimate.
+      for (const t of s.tolls || []) {
+        const prices = (t.fares || []).map(f => (f.convertedPrice || f.price || {}).value).filter(v => typeof v === 'number');
+        if (prices.length) { charge += Math.min(...prices); chargeNames.push(t.tollSystem || (t.fares[0] && t.fares[0].name) || 'Charge'); }
+      }
       // Spans give the functional class from a point offset in this section's polyline to the next span's offset.
       const spans = s.spans || [];
       spans.forEach((sp, i) => {
@@ -788,7 +869,7 @@ async function getRoutes(o, d, alts, avoid, capped){
       });
       pts = pts.concat(pts.length ? p.slice(1) : p); dur += s.summary.duration; len += s.summary.length;
     }
-    return { pts, dur, len, main };
+    return { pts, dur, len, main, charge, chargeNames };
   });
 }
 async function getFlow(b){
@@ -845,11 +926,98 @@ function score(route, idx, th){
   return { cong, wjam, tot, hit };
 }
 // Lowest cost within the time limit: congested metres plus the road preference's cost for main-road metres.
-function choose(cands, fastDur, extraS){
-  const w = roadPref().weight, cost = c => c.s.cong + w * c.main;
-  return cands.filter(c => c.dur <= fastDur + extraS)
-    .sort((x, y) => cost(x) - cost(y) || x.s.wjam - y.s.wjam || x.dur - y.dur)[0];
+// Cost in metres: congested distance, plus main-road distance weighted by the road preference,
+// plus a fixed amount for each TfL disruption on the route (a closure counts as 3 km).
+const TFL_COST = { closed: 3000, 4: 600, 3: 400, 2: 100, 1: 0 };
+function routeCost(c){
+  let t = 0;
+  for (const it of c.tfl || []) t += it.closedOnRoute ? TFL_COST.closed : TFL_COST[it.ord] || 0;
+  return c.s.cong + roadPref().weight * c.main + t;
 }
+function choose(cands, fastDur, extraS){
+  return cands.filter(c => c.dur <= fastDur + extraS)
+    .sort((x, y) => routeCost(x) - routeCost(y) || x.s.wjam - y.s.wjam || x.dur - y.dur)[0];
+}
+// ---------- Line helpers ----------
+const lineLen = pts => { let t = 0; for (let k = 1; k < pts.length; k++) t += dist(pts[k - 1], pts[k]); return t; };
+// Grid index of a polyline's segments, for fast "is this point near the line" checks.
+function lineIndex(pts){
+  const grid = new Map();
+  for (let k = 1; k < pts.length; k++) {
+    const a = pts[k - 1], b = pts[k];
+    const i0 = Math.floor(Math.min(a[0], b[0]) / CELL), i1 = Math.floor(Math.max(a[0], b[0]) / CELL);
+    const j0 = Math.floor(Math.min(a[1], b[1]) / CELL), j1 = Math.floor(Math.max(a[1], b[1]) / CELL);
+    for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) { const key = i + ',' + j; let c = grid.get(key); if (!c) grid.set(key, c = []); c.push([a, b]); }
+  }
+  return grid;
+}
+function nearLine(p, grid, maxM){
+  const i = Math.floor(p[0] / CELL), j = Math.floor(p[1] / CELL);
+  for (let di = -1; di <= 1; di++) for (let dj = -1; dj <= 1; dj++) {
+    const c = grid.get((i + di) + ',' + (j + dj)); if (!c) continue;
+    for (const [a, b] of c) if (distToSeg(p, a, b) <= maxM) return true;
+  }
+  return false;
+}
+// Share of route a (sampled every 50 m) that lies within 30 m of route b.
+function overlap(a, b){
+  const grid = lineIndex(b); let near = 0, tot = 0;
+  for (let k = 1; k < a.length; k++) {
+    const L = dist(a[k - 1], a[k]), n = Math.max(1, Math.ceil(L / 50));
+    for (let s = 0; s < n; s++) { const t = (s + .5) / n, p = [a[k-1][0] + (a[k][0] - a[k-1][0]) * t, a[k-1][1] + (a[k][1] - a[k-1][1]) * t]; tot += L / n; if (nearLine(p, grid, 30)) near += L / n; }
+  }
+  return tot ? near / tot : 0;
+}
+
+// ---------- TfL road disruptions ----------
+// TfL's Unified API lists active disruptions on London's roads, with a point, a severity and, for closures,
+// the closed street segments (as [lng, lat] line strings).
+let tflCache = { t: 0, items: [] };
+const SEV = { Severe: 4, Serious: 3, Moderate: 2, Minimal: 1 };
+function parseTfl(list){
+  const parseLine = t => { try { return JSON.parse(t).map(([lng, lat]) => [lat, lng]); } catch { return []; } };
+  return (Array.isArray(list) ? list : []).map(d => {
+    let pt = null;
+    try { const c = typeof d.point === 'string' ? JSON.parse(d.point) : d.geography && d.geography.coordinates; if (c && c.length === 2) pt = [c[1], c[0]]; } catch {}
+    const streets = d.streets || [];
+    const closed = streets.filter(st => st.closure && !/^open$/i.test(st.closure))
+      .flatMap(st => (st.segments || []).map(sg => parseLine(sg.lineString))).filter(l => l.length > 1);
+    return { id: d.id, pt, ord: SEV[d.severity] || 1, sev: d.severity || 'Unknown', loc: d.location || '', desc: d.comments || '', closed };
+  }).filter(it => it.pt);
+}
+async function getTfl(){
+  if (!$('tflon').checked) return [];
+  if (Date.now() - tflCache.t < 300000) return tflCache.items;
+  if (!tflkey() && (loadUsage().day.c.tfl || 0) >= 400) return tflCache.items;
+  try {
+    spend('tfl');
+    const r = await fetch('https://api.tfl.gov.uk/Road/all/Disruption?stripContent=true' + (tflkey() ? '&app_key=' + encodeURIComponent(tflkey()) : ''));
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    tflCache = { t: Date.now(), items: parseTfl(await r.json()) };
+  } catch (err) {
+    tflCache.t = Date.now() - 240000;   // try again in a minute rather than on every comparison
+  }
+  return tflCache.items;
+}
+// Disruptions on a route: the disruption point within 40 m of it, or a closed segment it follows for 50 m or more.
+function tflOnRoute(route, items){
+  const grid = lineIndex(route.pts), out = [];
+  for (const it of items) {
+    let closedOnRoute = false;
+    for (const seg of it.closed) {
+      let run = 0;
+      for (let k = 1; k < seg.length; k++) if (nearLine(seg[k], grid, 20) && nearLine(seg[k - 1], grid, 20)) run += dist(seg[k - 1], seg[k]);
+      if (run >= 50) { closedOnRoute = true; break; }
+    }
+    if (closedOnRoute || nearLine(it.pt, grid, 40)) out.push({ ...it, closedOnRoute });
+  }
+  return out;
+}
+function corridorPts(pts){
+  if (pts.length > 30) { const step = (pts.length - 1) / 29; pts = Array.from({ length: 30 }, (_, i) => pts[Math.round(i * step)]); }
+  return 'corridor:' + pts.map(p => p[0].toFixed(5) + ',' + p[1].toFixed(5)).join(';') + ';r=' + CORRIDOR_R;
+}
+
 function corridor(item){
   let pts = item.links.flat();
   if (pts.length > 30) { const step = (pts.length - 1) / 29; pts = Array.from({ length: 30 }, (_, i) => pts[Math.round(i * step)]); }
@@ -878,7 +1046,7 @@ async function run(){
   const isCoord = v => /^\s*-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?\s*$/.test(v);
   const known = w => fieldPoint[w] && fieldPoint[w].text === $(w).value;
   const geocodes = ['from', 'to'].filter(w => !isCoord($(w).value) && !known(w)).length;
-  const over = checkSpend({ geocode: geocodes, routing: 1 + ROUNDS + (roadPref().caps ? 1 : 0), flow: 1 });
+  const over = checkSpend({ geocode: geocodes, routing: (1 + ROUNDS + (roadPref().caps ? 1 : 0)) * (wantCharges() ? 2 : 1), flow: 1 });
   if (over) { status('Comparison not started. ' + over, true); return; }
   $('go').disabled = true; $('recalc').disabled = true; $('recalc').classList.add('busy');
   try {
@@ -899,30 +1067,36 @@ async function run(){
 
     status('Getting live traffic…');
     const box = bounds(cands);
-    const idx = buildIndex(await getFlow(box));
-    cands.forEach(c => c.s = score(c, idx, th));
+    const [flow, tflItems] = await Promise.all([getFlow(box), getTfl()]);
+    const idx = buildIndex(flow);
+    cands.forEach(c => { c.s = score(c, idx, th); c.tfl = tflOnRoute(c, tflItems); });
 
     // Round 1 routes around the congestion on the fastest route; later rounds route around
     // any congestion the previous avoidance route still runs through.
     const avoid = new Map();
+    // TfL closures on the fastest route are avoided from the first round.
+    for (const it of (cands[0].tfl || []).filter(t => t.closedOnRoute))
+      for (const seg of it.closed) if (avoid.size < MAX_AVOID) avoid.set('tfl:' + it.id + ':' + avoid.size, corridorPts(seg));
     let target = cands[0];
     for (let round = 1; round <= ROUNDS; round++) {
       const fresh = [...target.s.hit.entries()].filter(([it]) => !avoid.has(it)).sort((a, b) => b[1] * b[0].jf - a[1] * a[0].jf);
-      if (!fresh.length || avoid.size >= MAX_AVOID) break;
+      if ((!fresh.length && !(round === 1 && avoid.size)) || avoid.size >= MAX_AVOID && !(round === 1 && avoid.size)) break;
       for (const [it] of fresh) { if (avoid.size >= MAX_AVOID) break; avoid.set(it, corridor(it)); }
       status('Routing around ' + avoid.size + (avoid.size === 1 ? ' congested stretch' : ' congested stretches') + ' (round ' + round + ')…');
       let rs;
       try { rs = await getRoutes(o, d, 3, [...avoid.values()], true); }
       catch (err) { status('Avoidance round ' + round + ' failed: ' + err.message, true); break; }
       if (!rs.length) break;
-      rs.forEach(r => r.s = score(r, idx, th));
+      rs.forEach(r => { r.s = score(r, idx, th); r.tfl = tflOnRoute(r, tflItems); });
       rs.forEach((r, i) => { if (!isDupe(r, cands)) { r.label = 'Avoids ' + avoid.size + (avoid.size === 1 ? ' jam' : ' jams') + (i ? ', variant' : ''); cands.push(r); } });
       target = rs[0];
     }
 
     const fastest = cands.reduce((a, b) => b.dur < a.dur ? b : a);
     const best = choose(cands, fastest.dur, extraS);
-    lastRun = { cands, fastest, best, idx, th, extraS };
+    lastRun = { cands, fastest, best, idx, th, extraS, tflItems };
+    autoState.last = Date.now(); autoState.lastPos = [o.lat, o.lng]; hideBanner();
+    startTrip(o, d, best, fastest);
     render(best, true);
     setSheet(false);
     $('status').textContent = ''; $('status').className = '';
@@ -935,8 +1109,13 @@ async function run(){
     $('go').disabled = false; $('recalc').classList.remove('busy'); $('recalc').disabled = !lastInputs;
   }
 }
+// Recalculate: from your current position when a recent GPS fix is available, otherwise from the original start.
 $('recalc').addEventListener('click', () => {
   if (!lastInputs) return;
+  if (fix && Date.now() - fix.t < 60000 && fix.acc < 200) {
+    lastInputs.from = 'Current location';
+    lastInputs.pts.from = { text: 'Current location', lat: fix.lat, lng: fix.lng };
+  }
   $('from').value = lastInputs.from; $('to').value = lastInputs.to;
   $('th').value = lastInputs.th; $('extra').value = lastInputs.extra; optsSummary();
   fieldPoint.from = lastInputs.pts.from; fieldPoint.to = lastInputs.pts.to;
@@ -948,18 +1127,36 @@ const fmtT = s => { const m = Math.round(s / 60); return m < 60 ? m + ' min' : M
 const km = m => (m / 1000).toFixed(1) + ' km';
 const jamColour = jf => jf >= 8 ? '#8b0000' : jf >= 6 ? '#e8251a' : jf >= 4 ? '#f08a00' : '#f2c200';
 
+const money = v => '£' + (Math.round(v * 100) / 100).toFixed(2);
+function extras(r){
+  const bits = [];
+  if (r.charge !== null && r.charge !== undefined) bits.push(r.charge > 0 ? money(r.charge) + ' charges' : 'no charges');
+  const t = r.tfl || [];
+  if (t.some(x => x.closedOnRoute)) bits.push('<span class="closedtxt">road closure</span>');
+  else if (t.length) bits.push(t.length + (t.length === 1 ? ' TfL disruption' : ' TfL disruptions'));
+  return bits.length ? ' · ' + bits.join(' · ') : '';
+}
 function cmpRow(title, r, ref, colour, dashed){
   const pct = r.s.tot ? Math.round(100 * r.s.cong / r.s.tot) : 0, dt = r.dur - ref.dur;
   return `<div class="cmprow"><span class="sw${dashed ? ' dash' : ''}" style="--c:${colour}"></span>
-    <div><div class="cmptitle">${title}</div><div class="muted">${km(r.len)} · ${km(r.s.cong)} congested (${pct}%)${roadPref().caps ? ' · ' + km(r.main) + ' on main roads' : ''}</div></div>
+    <div><div class="cmptitle">${title}</div><div class="muted">${km(r.len)} · ${km(r.s.cong)} congested (${pct}%)${roadPref().caps ? ' · ' + km(r.main) + ' on main roads' : ''}${extras(r)}</div></div>
     <div class="cmptime"><b>${fmtT(r.dur)}</b>${dt > 30 ? `<span class="muted">+${fmtT(dt)}</span>` : ''}</div></div>`;
 }
 function render(selected, fit){
-  const { cands, fastest, best, idx, th, extraS } = lastRun;
+  const { cands, fastest, best, idx, th, extraS, tflItems } = lastRun;
   if (layers) map.removeLayer(layers);
   layers = L.layerGroup().addTo(map);
   // Traffic is drawn thin and translucent so the routes stay readable on top of it.
   for (const it of idx.items) for (const pts of it.links) L.polyline(pts, { color: jamColour(it.jf), weight: 2.5, opacity: .6, interactive: false }).addTo(layers);
+  // TfL disruptions inside the area of the routes: closed streets as dark dashed lines, others as dots by severity.
+  const bb = L.latLngBounds(cands.flatMap(c => c.pts)).pad(0.1);
+  for (const it of tflItems || []) {
+    if (!bb.contains(it.pt)) continue;
+    for (const seg of it.closed) L.polyline(seg, { color: '#111', weight: 4, dashArray: '4 6', opacity: .9, interactive: false }).addTo(layers);
+    const m = L.circleMarker(it.pt, { radius: it.closed.length ? 7 : 5, weight: 2, color: '#fff', fillOpacity: 1,
+      fillColor: it.closed.length ? '#111' : it.ord >= 3 ? '#e8251a' : it.ord === 2 ? '#f08a00' : '#8a939b' }).addTo(layers);
+    m.bindPopup('<b>' + esc(it.loc || 'TfL disruption') + '</b><br>' + esc(it.sev) + (it.closed.length ? ', road closed' : '') + '<br>' + esc(it.desc.slice(0, 300)));
+  }
   if (fastest !== selected) L.polyline(fastest.pts, { color: '#4b555e', weight: 5, dashArray: '2 9', lineCap: 'round', opacity: .9 }).addTo(layers);
   L.polyline(selected.pts, { color: '#fff', weight: 10, opacity: .95 }).addTo(layers);
   L.polyline(selected.pts, { color: '#1f6feb', weight: 6 }).addTo(layers);
@@ -975,9 +1172,231 @@ function render(selected, fit){
     ? cmpRow(best === fastest ? 'Fastest and least congested' : 'Fastest', fastest, fastest, '#1f6feb')
     : cmpRow(selected === best ? (roadPref().caps ? 'Recommended' : 'Least congested') : selected.label, selected, fastest, '#1f6feb') + cmpRow('Fastest', fastest, fastest, '#4b555e', true);
   $('ncand').textContent = cands.length;
-  $('tbody').innerHTML = cands.map((c, i) => `<tr data-i="${i}" class="${c === selected ? 'sel' : ''}${c.dur > fastest.dur + extraS ? ' over' : ''}"><td>${c.label}${c === best ? ' <span class="tag">Chosen</span>' : ''}</td><td>${fmtT(c.dur)}</td><td>${km(c.len)}</td><td>${km(c.s.cong)}</td></tr>`).join('');
+  const st = selected.tfl || [], closedHere = st.filter(x => x.closedOnRoute);
+  $('tflwarn').hidden = !st.length;
+  $('tflwarn').className = 'warnline' + (closedHere.length ? ' closed' : '');
+  $('tflwarn').textContent = closedHere.length
+    ? 'TfL reports a road closure on this route: ' + closedHere.map(x => x.loc).join('; ')
+    : st.length ? 'TfL disruption on this route: ' + st.map(x => x.loc + ' (' + x.sev.toLowerCase() + ')').join('; ') : '';
+  $('tbody').innerHTML = cands.map((c, i) => `<tr data-i="${i}" class="${c === selected ? 'sel' : ''}${c.dur > fastest.dur + extraS ? ' over' : ''}"><td>${c.label}${c === best ? ' <span class="tag">Chosen</span>' : ''}${(c.tfl || []).some(x => x.closedOnRoute) ? ' <span class="tag closed">Closure</span>' : (c.tfl || []).length ? ' <span class="tag warn">TfL</span>' : ''}</td><td>${fmtT(c.dur)}</td><td>${km(c.len)}</td><td>${km(c.s.cong)}</td></tr>`).join('');
   $('results').hidden = false;
 }
+// ---------- Re-check while driving ----------
+// Strict limits so automatic checks can't use up the HERE free allowance: at most 3 HERE requests per check,
+// 12 checks a day and 150 a month, and none once routing or traffic use passes half its monthly allowance.
+const AUTO_DAY = 12, AUTO_MONTH = 150, AUTO_RESERVE = 0.5;
+let autoState = { last: 0, lastPos: null, busy: false, offer: null };
+function autoBlocked(){
+  if (!$('autocheck').checked) return 'Off.';
+  if (!lastRun || !lastInputs) return 'Waiting for a route to be compared.';
+  if (watchId === null) return 'Needs your location to be shown (the crosshair button).';
+  if (!fix || Date.now() - fix.t > 30000 || fix.acc > 100) return 'Waiting for a good GPS position.';
+  const u = loadUsage();
+  if ((u.day.c.auto || 0) >= AUTO_DAY) return 'Daily limit of ' + AUTO_DAY + ' checks reached.';
+  if ((u.month.c.auto || 0) >= AUTO_MONTH) return 'Monthly limit of ' + AUTO_MONTH + ' checks reached.';
+  for (const k of ['routing', 'flow']) if ((u.month.c[k] || 0) >= ALLOW[k] * AUTO_RESERVE) return 'Paused because HERE ' + NAMES[k].toLowerCase() + ' use is over half its monthly allowance.';
+  if (plan() === 'limited' && hereSum(u.day.c) >= DAILY * AUTO_RESERVE) return 'Paused because over half of today\'s HERE requests are used.';
+  if (checkSpend({ routing: 2, flow: 1 })) return 'Paused because your allowance limit would be reached.';
+  return null;
+}
+function autoNote(){
+  const u = loadUsage(), b = $('autocheck').checked ? autoBlocked() : null;
+  $('autonote').textContent = 'Each check uses at most 3 HERE requests and only runs while your location is shown, the app is open, and you have moved 500 m since the last check. Limits: ' + AUTO_DAY + ' a day, ' + AUTO_MONTH +
+    ' a month, and none once HERE routing or traffic use passes half its monthly allowance. Used ' + (u.day.c.auto || 0) + ' today and ' + (u.month.c.auto || 0) + ' this month.' + (b ? ' Status: ' + b : '');
+}
+function autoTick(){
+  if (autoState.busy || document.visibilityState !== 'visible' || autoBlocked()) return;
+  if (Date.now() - autoState.last < (+$('autoint').value) * 60000) return;
+  const here = [fix.lat, fix.lng], dest = [lastInputs.pts.to.lat, lastInputs.pts.to.lng];
+  if (autoState.lastPos && dist(here, autoState.lastPos) < 500) return;
+  if (dist(here, dest) < 2000) return;
+  autoState.busy = true;
+  autoCheck(here).catch(() => {}).finally(() => { autoState.busy = false; autoNote(); });
+}
+setInterval(() => { autoTick(); if (!$('settings').hidden) autoNote(); }, 30000);
+async function autoCheck(here){
+  autoState.last = Date.now(); autoState.lastPos = here; spend('auto');
+  const { best: cur, th, extraS } = lastRun;
+  const o = { lat: here[0], lng: here[1] }, d = lastInputs.pts.to;
+  // Remaining part of the current route: from the nearest segment to the destination.
+  let k = 1, off = Infinity;
+  for (let i = 1; i < cur.pts.length; i++) { const dd = distToSeg(here, cur.pts[i - 1], cur.pts[i]); if (dd < off) { off = dd; k = i; } }
+  const rem = [here].concat(cur.pts.slice(k)), remLen = lineLen(rem);
+  // Off the current route, or nearly there: leave it to the driver.
+  if (remLen < 2000 || off > 150) return;
+  const cands = (await getRoutes(o, d, 3, [], false, true)).map((r, i) => ({ ...r, label: i ? 'From here, alternative ' + i : 'From here, fastest' }));
+  if (!cands.length) return;
+  const [flow, tflItems] = await Promise.all([getFlow(bounds(cands.concat([{ pts: rem }]))), getTfl()]);
+  const idx = buildIndex(flow);
+  const current = { pts: rem, len: remLen, main: cur.main * remLen / Math.max(1, cur.len), charge: null, label: 'Current route' };
+  // The current route's remaining time: HERE's time for a matching route from here if there is one, otherwise pro rata.
+  const similar = cands.find(c => overlap(rem, c.pts) > 0.85);
+  current.dur = similar ? similar.dur : cur.dur * remLen / Math.max(1, cur.len);
+  for (const c of cands.concat([current])) { c.s = score(c, idx, th); c.tfl = tflOnRoute(c, tflItems); }
+  // At most one avoidance request, only if the current route or the fastest from here runs through congestion.
+  const hits = [...new Set([...current.s.hit.keys(), ...cands[0].s.hit.keys()])];
+  if (hits.length && !checkSpend({ routing: 1 })) {
+    for (const r of await getRoutes(o, d, 1, hits.slice(0, MAX_AVOID).map(corridor), true, true))
+      if (!isDupe(r, cands)) { r.label = 'From here, avoiding jams'; r.s = score(r, idx, th); r.tfl = tflOnRoute(r, tflItems); cands.push(r); }
+  }
+  const all = cands.concat([current]);
+  const fastest = all.reduce((a, b) => b.dur < a.dur ? b : a);
+  const pick = choose(all, fastest.dur, extraS) || current;
+  if (pick === current || overlap(pick.pts, rem) > 0.85) return;
+  const saveCost = routeCost(current) - routeCost(pick), saveTime = current.dur - pick.dur;
+  if (saveCost < 500 && saveTime < 180) return;
+  autoState.offer = { cands: all, fastest, best: pick, idx, th, extraS, tflItems, o };
+  const parts = [];
+  if (saveTime >= 60) parts.push(fmtT(saveTime) + ' faster'); else if (saveTime <= -60) parts.push(fmtT(-saveTime) + ' slower');
+  if (current.s.cong - pick.s.cong >= 300) parts.push(km(current.s.cong - pick.s.cong) + ' less congestion');
+  if ((current.tfl || []).length > (pick.tfl || []).length) parts.push('avoids a TfL disruption');
+  showBanner('Better route found' + (parts.length ? ': ' + parts.join(', ') : '') + '.');
+}
+function showBanner(t){ $('bannertext').textContent = t; $('banner').hidden = false; }
+function hideBanner(){ $('banner').hidden = true; autoState.offer = null; }
+$('bannerno').addEventListener('click', hideBanner);
+$('banneryes').addEventListener('click', () => {
+  const off = autoState.offer;
+  if (!off) return hideBanner();
+  lastRun = { cands: off.cands, fastest: off.fastest, best: off.best, idx: off.idx, th: off.th, extraS: off.extraS, tflItems: off.tflItems };
+  lastInputs.from = 'Current location'; lastInputs.pts.from = { text: 'Current location', lat: off.o.lat, lng: off.o.lng };
+  $('from').value = 'Current location'; fieldPoint.from = lastInputs.pts.from;
+  if (trip) trip.switched = true;
+  hideBanner();
+  render(off.best, true);
+  follow = true; setLocBtn();
+  $('summary').textContent = 'Switched: ' + fmtT(off.best.dur) + ' from here, ' + km(off.best.s.cong) + ' in congestion';
+});
+
+// ---------- Journey log ----------
+// After a comparison, a journey starts when you leave the start point and ends within about 120 m of the destination.
+// Needs your location shown and the app open throughout; only the summary is stored, not the track.
+let trip = null;
+const loadLog = () => { try { return JSON.parse(localStorage.getItem('journeys') || '[]'); } catch { return []; } };
+const saveLog = l => { try { localStorage.setItem('journeys', JSON.stringify(l)); } catch {} };
+function startTrip(o, d, best, fastest){
+  trip = { from: [o.lat, o.lng], to: [d.lat, d.lng], fromName: lastInputs.from, toName: lastInputs.to, predicted: best.dur, fastestPredicted: fastest.dur,
+           bestPts: best.pts, fastPts: fastest.pts, created: Date.now(), nearStart: null, started: null, trace: [], switched: false,
+           level: lastInputs.th, roads: $('roadpref').value };
+  if (fix && Date.now() - fix.t < 60000 && dist([fix.lat, fix.lng], trip.from) <= 150) trip.nearStart = fix.t;
+}
+function tripFix(f){
+  if (!trip) return;
+  const p = [f.lat, f.lng], now = f.t;
+  if (now - trip.created > 4 * 3600000) { trip = null; return; }
+  if (!trip.started) {
+    if (dist(p, trip.from) <= 150) { trip.nearStart = now; return; }
+    if (!trip.nearStart) return;   // not seen at the start yet, so this isn't a journey from it
+    trip.started = trip.nearStart;
+  }
+  const last = trip.trace[trip.trace.length - 1];
+  if ((!last || dist(last, p) >= 50) && trip.trace.length < 3000) trip.trace.push(p);
+  if (dist(p, trip.to) <= 120) finishTrip(now);
+}
+function finishTrip(now){
+  const t = trip; trip = null;
+  const actual = (now - t.started) / 1000;
+  if (actual < 60 || t.trace.length < 3) return;
+  const onBest = overlap(t.trace, t.bestPts), onFast = overlap(t.trace, t.fastPts);
+  const followed = t.switched ? 'switched route on the way' : onBest >= 0.8 && onBest >= onFast ? 'chosen route' : onFast >= 0.8 ? 'fastest route' : 'another route';
+  const log = loadLog();
+  log.unshift({ date: new Date(t.started).toISOString(), from: t.fromName, to: t.toName, predicted: Math.round(t.predicted), fastest: Math.round(t.fastestPredicted),
+                actual: Math.round(actual), km: +(lineLen(t.trace) / 1000).toFixed(1), followed, level: t.level, roads: t.roads });
+  saveLog(log.slice(0, 200)); renderLog();
+  status('Journey logged: it took ' + fmtT(actual) + ' against ' + fmtT(t.predicted) + ' predicted.');
+}
+function renderLog(){
+  const log = loadLog();
+  if (!log.length) {
+    $('logsummary').textContent = 'No journeys yet. One is logged automatically when you compare routes, set off from the start with your location shown and the app open, and arrive at the destination.';
+    $('loglist').innerHTML = ''; return;
+  }
+  const ratio = log.reduce((a, j) => a + j.actual / Math.max(1, j.predicted), 0) / log.length;
+  $('logsummary').textContent = log.length + (log.length === 1 ? ' journey' : ' journeys') + ' logged. On average they took ' + Math.round(ratio * 100) + '% of the predicted time.';
+  $('loglist').innerHTML = log.slice(0, 10).map(j => `<div class="logitem">${esc(new Date(j.date).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }))} · ${esc(j.from)} → ${esc(j.to)}<br><span class="muted">Took ${fmtT(j.actual)}, predicted ${fmtT(j.predicted)} · ${esc(j.followed)}</span></div>`).join('');
+}
+$('logcopy').addEventListener('click', async () => {
+  const q = v => '"' + String(v).replace(/"/g, '""') + '"';
+  const rows = loadLog().map(j => [j.date, j.from, j.to, j.predicted, j.fastest, j.actual, j.km, j.followed, j.level, j.roads].map(q).join(','));
+  const csv = ['date,from,to,predicted_s,fastest_predicted_s,actual_s,km,followed,congestion_level,road_preference'].concat(rows).join('\n');
+  try { await navigator.clipboard.writeText(csv); $('logcopy').textContent = 'Copied'; } catch { $('logcopy').textContent = 'Copy failed'; }
+  setTimeout(() => { $('logcopy').textContent = 'Copy as CSV'; }, 2000);
+});
+let clearArmed = false;
+$('logclear').addEventListener('click', () => {
+  if (!clearArmed) {
+    clearArmed = true; $('logclear').textContent = 'Tap again to clear';
+    setTimeout(() => { clearArmed = false; $('logclear').textContent = 'Clear log'; }, 3000);
+    return;
+  }
+  saveLog([]); renderLog(); clearArmed = false; $('logclear').textContent = 'Clear log';
+});
+
+// ---------- Dark map ----------
+// Darkens whichever base map is in use with a colour filter. "After sunset" uses the standard sunrise equation.
+function sunTimes(date, lat, lng){
+  const rad = Math.PI / 180, J2000 = Date.UTC(2000, 0, 1, 12);
+  const n = Math.round((Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 12) - J2000) / 86400000);
+  const Js = n - lng / 360;
+  const M = (357.5291 + 0.98560028 * Js) % 360;
+  const C = 1.9148 * Math.sin(M * rad) + 0.02 * Math.sin(2 * M * rad) + 0.0003 * Math.sin(3 * M * rad);
+  const lam = (M + C + 180 + 102.9372) % 360;
+  const Jt = Js + 0.0053 * Math.sin(M * rad) - 0.0069 * Math.sin(2 * lam * rad);
+  const dec = Math.asin(Math.sin(lam * rad) * Math.sin(23.4397 * rad));
+  const cosW = (Math.sin(-0.833 * rad) - Math.sin(lat * rad) * Math.sin(dec)) / (Math.cos(lat * rad) * Math.cos(dec));
+  const w = Math.acos(Math.max(-1, Math.min(1, cosW))) / rad;
+  return { rise: J2000 + (Jt - w / 360) * 86400000, set: J2000 + (Jt + w / 360) * 86400000 };
+}
+const darkQuery = window.matchMedia('(prefers-color-scheme: dark)');
+function applyDark(){
+  const m = $('darkmap').value;
+  let dark = false;
+  if (m === 'phone') dark = darkQuery.matches;
+  else if (m === 'sunset') {
+    const t = sunTimes(new Date(), fix ? fix.lat : 51.507, fix ? fix.lng : -0.128), now = Date.now();
+    dark = now < t.rise || now > t.set;
+  }
+  $('map').classList.toggle('darktiles', dark);
+}
+$('darkmap').addEventListener('change', applyDark);
+darkQuery.addEventListener('change', applyDark);
+setInterval(applyDark, 300000);
+applyDark();
+
+// ---------- Shortcuts ----------
+// A shortcut stores both ends with their coordinates, so running one needs no geocoding.
+let shorts = [];
+try { shorts = JSON.parse(localStorage.getItem('shortcuts') || '[]'); } catch { shorts = []; }
+const saveShorts = () => { try { localStorage.setItem('shortcuts', JSON.stringify(shorts)); } catch {} };
+function renderShorts(){
+  $('shortcuts').hidden = !shorts.length;
+  $('shortcuts').innerHTML = shorts.map((sc, i) => `<button type="button" class="short" data-i="${i}">${esc(sc.name)}</button>`).join('');
+  $('shortlist').innerHTML = shorts.length
+    ? shorts.map((sc, i) => `<div class="favitem"><span>${esc(sc.name)}</span><button type="button" data-del="${i}">Delete</button></div>`).join('')
+    : '<p class="muted">No shortcuts yet. After comparing routes, use "Save this journey as a shortcut".</p>';
+}
+$('shortcuts').addEventListener('click', e => {
+  const b = e.target.closest('button[data-i]'); if (!b) return;
+  const sc = shorts[+b.dataset.i];
+  for (const w of ['from', 'to']) { $(w).value = sc[w].text; fieldPoint[w] = { ...sc[w] }; setMark(w, sc[w].lat, sc[w].lng); }
+  run();
+});
+$('shortlist').addEventListener('click', e => {
+  const b = e.target.closest('button[data-del]'); if (!b) return;
+  shorts.splice(+b.dataset.del, 1); saveShorts(); renderShorts();
+});
+$('saveshort').addEventListener('click', () => {
+  if (!lastInputs) return;
+  const nm = t => /^-?\d/.test(t) ? 'Pin' : t === 'Current location' ? 'Saved spot' : t;
+  const name = nm(lastInputs.pts.from.text) + ' → ' + nm(lastInputs.pts.to.text);
+  shorts = shorts.filter(x => x.name !== name);
+  shorts.push({ name, from: { ...lastInputs.pts.from, text: nm(lastInputs.pts.from.text) }, to: { ...lastInputs.pts.to, text: nm(lastInputs.pts.to.text) } });
+  saveShorts(); renderShorts();
+  status('Saved the shortcut "' + name + '".');
+});
+renderShorts();
+renderLog();
+
 const savedPref = store.get('roadPref');
 if (savedPref && ROADPREF[savedPref]) $('roadpref').value = savedPref;
 showRoadDesc();
