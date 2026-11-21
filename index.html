@@ -79,6 +79,29 @@ tbody tr.sel{outline:2px solid var(--blue);outline-offset:-2px}
 .cog[aria-pressed=true]{background:var(--blue);border-color:var(--blue);color:#fff}
 @media(prefers-reduced-motion:no-preference){.cog svg{transition:transform .3s}.cog[aria-pressed=true] svg{transform:rotate(60deg)}}
 #keymsg.err{color:var(--red)}
+#form{display:flex;flex-direction:column;gap:12px}
+.trip{display:grid;grid-template-columns:14px minmax(0,1fr) 44px;align-items:center;column-gap:10px;row-gap:0;
+  border:1px solid var(--line);border-radius:10px;padding:2px 4px 2px 12px;position:relative}
+.trip .field{display:flex;align-items:center;gap:2px;min-height:48px}
+.trip .field:first-of-type{border-bottom:1px solid var(--line)}
+.trip input{border:0;background:none;padding:0 4px;min-height:44px;flex:1 1 0;width:auto}
+.trip input:focus-visible{outline:none}
+.trip .field:focus-within{box-shadow:inset 0 -2px 0 var(--blue)}
+.dot{width:12px;height:12px;border-radius:50%;justify-self:center}
+.dot.start{background:#1a7f37}
+.dot.end{background:var(--ink);border-radius:3px}
+.trip::before{content:"";position:absolute;left:18px;top:31px;bottom:31px;border-left:2px dotted var(--muted)}
+.swap{grid-row:1 / span 2;grid-column:3}
+button.icon{width:44px;min-height:44px;padding:0;display:grid;place-items:center;border:0;background:none;color:var(--muted);border-radius:8px;flex:none}
+button.icon:hover{color:var(--ink)}
+button.icon.pick[aria-pressed=true]{background:var(--blue);color:#fff}
+.opts{border:0;padding:0}
+.opts summary{list-style:none;display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:40px;font-size:14px;color:var(--muted);font-weight:400}
+.opts summary::-webkit-details-marker{display:none}
+.opts[open] summary{margin-bottom:6px}
+.opts[open] .chev{transform:rotate(180deg)}
+.chev{flex:none;transition:transform .2s}
+#status:empty{display:none}
 .linkbtn{border:0;background:none;color:var(--blue);padding:0;min-height:36px;font-size:14px;font-weight:500}
 .sheet-bar{display:none}
 @media(max-width:800px){
@@ -86,7 +109,10 @@ tbody tr.sel{outline:2px solid var(--blue);outline-offset:-2px}
   #map{position:fixed;inset:0;height:auto}
   aside{position:fixed;left:0;right:0;bottom:0;z-index:1000;max-height:78dvh;border-right:0;border-top:1px solid var(--line);border-radius:14px 14px 0 0;box-shadow:0 -4px 20px rgba(0,0,0,.25);padding:0 16px calc(20px + env(safe-area-inset-bottom));gap:16px}
   aside.collapsed{overflow:hidden;max-height:calc(57px + env(safe-area-inset-bottom))}
-  .sheet-bar{display:flex;position:sticky;top:0;z-index:1;background:var(--panel);align-items:center;gap:10px;min-height:56px;margin:0 -16px;padding:6px 16px;border-bottom:1px solid var(--line)}
+  .sheet-bar{display:flex;position:sticky;top:0;z-index:1;width:calc(100% + 32px);background:var(--panel);align-items:center;gap:10px;min-height:56px;margin:0 -16px;padding:14px 16px 6px;border:0;border-bottom:1px solid var(--line);border-radius:14px 14px 0 0;text-align:left}
+  .sheet-bar .grab{position:absolute;top:6px;left:50%;width:40px;height:4px;margin-left:-20px;border-radius:2px;background:var(--line)}
+  aside.collapsed .sheet-bar .chev{transform:rotate(180deg)}
+  .leaflet-control-zoom{display:none}
   #summary{flex:1;font-size:14px;line-height:1.3}
   .intro{display:none}
 }
@@ -94,7 +120,7 @@ tbody tr.sel{outline:2px solid var(--blue);outline-offset:-2px}
 </head>
 <body>
 <aside id="sheet">
-  <div class="sheet-bar"><p id="summary">Congestion router</p><button type="button" id="sheetToggle" aria-expanded="true" aria-controls="sheet">Hide</button></div>
+  <button type="button" class="sheet-bar" id="sheetToggle" aria-expanded="true" aria-controls="sheet"><span class="grab" aria-hidden="true"></span><span id="summary">Congestion router</span><svg class="chev" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></button>
   <div class="intro">
     <h1>Congestion router</h1>
     <p class="muted">Compares HERE's fastest route with the least congested route within your extra-time limit.</p>
@@ -140,31 +166,44 @@ tbody tr.sel{outline:2px solid var(--blue);outline-offset:-2px}
 
   <div id="mainview" class="view">
   <form id="form">
-    <label for="from">From</label>
-    <div class="row"><input id="from" placeholder="Address, postcode or lat, lng" autocomplete="off"><button type="button" class="pick" data-for="from" aria-pressed="false">Pick on map</button></div>
-    <button type="button" id="locate" class="linkbtn">Use my location</button>
-    <div style="height:4px"></div>
-    <label for="to">To</label>
-    <div class="row"><input id="to" placeholder="Address, postcode or lat, lng" autocomplete="off"><button type="button" class="pick" data-for="to" aria-pressed="false">Pick on map</button></div>
-    <div style="height:10px"></div>
-    <div class="grid2">
-      <div><label for="th">Congested from jam factor</label>
-        <select id="th">
-          <option value="3">3 (busy)</option>
-          <option value="4" selected>4 (slow)</option>
-          <option value="5">5</option>
-          <option value="6">6 (heavy)</option>
-          <option value="8">8 (queuing)</option>
-        </select></div>
-      <div><label for="extra">Max extra time (min)</label><input id="extra" type="number" min="0" max="120" step="1" value="15"></div>
+    <div class="trip">
+      <span class="dot start" aria-hidden="true"></span>
+      <div class="field"><input id="from" placeholder="Start" aria-label="Start" autocomplete="off">
+        <button type="button" id="locate" class="icon" aria-label="Use my location" title="Use my location"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg></button>
+        <button type="button" class="icon pick" data-for="from" aria-pressed="false" aria-label="Pick start on map" title="Pick on map"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.1-7-11.5a7 7 0 0 1 14 0C19 14.9 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg></button></div>
+      <button type="button" id="swap" class="icon swap" aria-label="Swap start and destination" title="Swap"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4v16M7 4 3 8M7 4l4 4M17 20V4M17 20l-4-4M17 20l4-4"/></svg></button>
+      <span class="dot end" aria-hidden="true"></span>
+      <div class="field"><input id="to" placeholder="Destination" aria-label="Destination" autocomplete="off">
+        <button type="button" class="icon pick" data-for="to" aria-pressed="false" aria-label="Pick destination on map" title="Pick on map"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.1-7-11.5a7 7 0 0 1 14 0C19 14.9 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg></button></div>
     </div>
-    <div style="height:12px"></div>
-    <div class="row"><button type="button" id="swap">Swap</button><button class="primary" id="go" type="submit">Compare routes</button></div>
+    <details class="opts">
+      <summary><span id="optsSummary"></span><svg class="chev" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></summary>
+      <div class="grid2">
+        <div><label for="th">Congested from jam factor</label>
+          <select id="th">
+            <option value="3">3 (busy)</option>
+            <option value="4" selected>4 (slow)</option>
+            <option value="5">5</option>
+            <option value="6">6 (heavy)</option>
+            <option value="8">8 (queuing)</option>
+          </select></div>
+        <div><label for="extra">Max extra time (min)</label><input id="extra" type="number" inputmode="numeric" min="0" max="120" step="1" value="15"></div>
+      </div>
+    </details>
+    <button class="primary" id="go" type="submit">Compare routes</button>
   </form>
 
   <p id="status" role="status"></p>
 
   <section id="results" hidden>
+    <div>
+      <div class="legend">
+        <span><i style="background:#f2c200"></i>Jam 2–4</span><span><i style="background:#f08a00"></i>4–6</span>
+        <span><i style="background:#e8251a"></i>6–8</span><span><i style="background:#8b0000"></i>8+ / closed</span>
+        <span><i style="background:#1f6feb"></i>Chosen</span><span><i style="background:#6b7680"></i>Fastest</span>
+      </div>
+    </div>
+    <div style="height:12px"></div>
     <p id="verdict"></p>
     <div style="height:10px"></div>
     <div class="cards" id="cards"></div>
@@ -172,14 +211,6 @@ tbody tr.sel{outline:2px solid var(--blue);outline-offset:-2px}
     <h2>All candidate routes</h2>
     <table><thead><tr><th>Route</th><th>Time</th><th>Distance</th><th>Congested</th></tr></thead><tbody id="tbody"></tbody></table>
   </section>
-
-  <div>
-    <div class="legend">
-      <span><i style="background:#f2c200"></i>Jam 2–4</span><span><i style="background:#f08a00"></i>4–6</span>
-      <span><i style="background:#e8251a"></i>6–8</span><span><i style="background:#8b0000"></i>8+ / closed</span>
-      <span><i style="background:#1f6feb"></i>Chosen</span><span><i style="background:#6b7680"></i>Fastest</span>
-    </div>
-  </div>
 
   <p id="usagewarn" class="muted" hidden></p>
   </div>
@@ -216,8 +247,16 @@ $('key').addEventListener('change', () => { persistKey(); setTiles(); });
 $('remember').addEventListener('change', persistKey);
 $('key').addEventListener('input', () => { $('keymsg').textContent = ''; $('keymsg').className = 'muted'; });
 
+// ---------- Route options summary ----------
+function optsSummary(){
+  $('optsSummary').textContent = 'Avoid jam factor ' + $('th').value + '+, up to ' + (Math.max(0, +$('extra').value || 0)) + ' min extra';
+}
+$('th').addEventListener('change', optsSummary);
+$('extra').addEventListener('input', optsSummary);
+optsSummary();
+
 // ---------- Reload and version ----------
-const APP_VERSION = '2026-11-21.6';
+const APP_VERSION = '2026-11-21.7';
 $('version').textContent = 'Version ' + APP_VERSION + '.';
 // Re-requesting the page with cache: 'reload' replaces the browser's cached copy before reloading.
 $('reload').addEventListener('click', () => {
@@ -390,7 +429,6 @@ $('swap').addEventListener('click', () => { const a = $('from').value; $('from')
 const phone = window.matchMedia('(max-width: 800px)');
 function setSheet(open){
   $('sheet').classList.toggle('collapsed', !open);
-  $('sheetToggle').textContent = open ? 'Hide' : 'Show';
   $('sheetToggle').setAttribute('aria-expanded', String(open));
   setTimeout(() => map.invalidateSize(), 250);
 }
