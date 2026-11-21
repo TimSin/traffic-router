@@ -11,7 +11,7 @@ A web page that compares HERE's fastest driving route with the least congested r
 
 ## Use
 
-Open the page, enter a HERE API key under "HERE API key", and enter a start and destination. The key is kept only in the browser that entered it; it is not stored in this repository.
+Open the page, enter a HERE API key under Settings, and enter a start and destination. The key is kept only in the browser that entered it; it is not stored in this repository.
 
 On an iPhone, open the GitHub Pages address in Safari and choose Share, then Add to Home Screen.
 
