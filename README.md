@@ -17,7 +17,7 @@ On an iPhone, open the GitHub Pages address in Safari and choose Share, then Add
 
 ## Base map
 
-The map background uses OpenStreetMap's standard tiles by default, so only routing, traffic and geocoding requests count against the HERE allowance. HERE's own tiles can be chosen under "Base map". OpenStreetMap's tiles must be requested with a Referer header, so they load from the hosted page but not from a copy of the file opened directly from disk; use the HERE base map in that case.
+The map background uses OpenStreetMap's standard tiles by default, so only routing, traffic and geocoding requests count against the HERE allowance. HERE's own tiles can be chosen under Settings. OpenStreetMap's tiles must be requested with a Referer header, so they load from the hosted page but not from a copy of the file opened directly from disk; use the HERE base map in that case.
 
 ## Free allowance limit
 
