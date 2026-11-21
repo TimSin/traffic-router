@@ -238,6 +238,16 @@ tr.over td{opacity:.45}
     </div>
     <p class="muted">The key is used only for requests from this page to HERE. If you tick "Remember in this browser", it is kept in this browser's local storage and nowhere else. You can create a key at <a href="https://platform.here.com">platform.here.com</a>.</p>
     <div>
+      <h3>Road preference</h3>
+      <label for="roadpref">Route choice</label>
+      <select id="roadpref">
+        <option value="off">Any roads</option>
+        <option value="slight">Prefer smaller roads a little</option>
+        <option value="strong">Prefer smaller roads strongly</option>
+      </select>
+      <p class="muted" id="roaddesc" style="margin-top:6px"></p>
+    </div>
+    <div>
       <h3>Base map</h3>
       <label for="basemap">Map background</label>
       <select id="basemap">
@@ -311,6 +321,10 @@ function persistKey(){ store.set('hereKey', $('remember').checked && key() ? key
 $('key').addEventListener('change', () => { persistKey(); setTiles(); });
 $('remember').addEventListener('change', persistKey);
 $('key').addEventListener('input', () => { $('keymsg').textContent = ''; $('keymsg').className = 'muted'; });
+
+// ---------- Road preference setting ----------
+const showRoadDesc = () => { $('roaddesc').textContent = roadPref().desc; };
+$('roadpref').addEventListener('change', () => { store.set('roadPref', $('roadpref').value); showRoadDesc(); });
 
 // ---------- Route options summary ----------
 // Congestion levels are HERE's jam factor (0 to 10). Each level counts that value and above as congested.
@@ -391,7 +405,7 @@ $('favok').addEventListener('click', async () => {
 renderFavs();
 
 // ---------- Reload and version ----------
-const APP_VERSION = '2026-11-21.13';
+const APP_VERSION = '2026-11-21.14';
 $('version').textContent = 'Version ' + APP_VERSION + '.';
 // Re-requesting the page with cache: 'reload' replaces the browser's cached copy before reloading.
 $('reload').addEventListener('click', () => {
@@ -745,15 +759,36 @@ async function locate(text, which){
   if (!j.items || !j.items.length) throw new Error('No match found for "' + text + '".');
   return j.items[0].position;
 }
-async function getRoutes(o, d, alts, avoid){
+// Road preference. HERE's road functional classes run from 1 (motorways and major A roads) to 5 (local streets).
+// A preference caps the speed HERE assumes on the larger classes, so it favours smaller roads when choosing a route,
+// and adds a cost per metre of main road (classes 1 and 2) when the app picks between candidates.
+const ROADPREF = {
+  off: { caps: '', weight: 0, desc: 'Routes use whichever roads HERE and the congestion check find best.' },
+  slight: { caps: '17.9,17.9', weight: 0.15, desc: 'Main roads (motorways and major A roads) are treated as no faster than 40 mph, so routes on smaller roads are favoured when the time difference is small. Times for those routes are worked out with that limit, so they may be slightly overstated where they use main roads.' },
+  strong: { caps: '11.2,11.2,13.4', weight: 0.4, desc: 'Main roads are treated as no faster than 25 mph and other A and B roads as no faster than 30 mph, so smaller roads are strongly favoured. Times for those routes are worked out with these limits, so they may be overstated where they use main roads.' }
+};
+const roadPref = () => ROADPREF[$('roadpref').value] || ROADPREF.off;
+// capped: apply the road preference's speed caps to this request (never to the plain fastest-route request).
+async function getRoutes(o, d, alts, avoid, capped){
   let u = 'https://router.hereapi.com/v8/routes?transportMode=car&origin=' + o.lat + ',' + o.lng + '&destination=' + d.lat + ',' + d.lng +
-          '&return=polyline,summary&alternatives=' + alts + '&apiKey=' + encodeURIComponent(key());
+          '&return=polyline,summary&spans=functionalClass&alternatives=' + alts + '&apiKey=' + encodeURIComponent(key());
   if (avoid.length) u += '&avoid[areas]=' + encodeURIComponent(avoid.join('|'));
+  if (capped && roadPref().caps) u += '&vehicle[speedCapPerFc]=' + roadPref().caps;
   const j = await api(u, 'routing');
   return (j.routes || []).map(r => {
-    let pts = [], dur = 0, len = 0;
-    for (const s of r.sections) { const p = decodeFP(s.polyline); pts = pts.concat(pts.length ? p.slice(1) : p); dur += s.summary.duration; len += s.summary.length; }
-    return { pts, dur, len };
+    let pts = [], dur = 0, len = 0, main = 0;
+    for (const s of r.sections) {
+      const p = decodeFP(s.polyline);
+      // Spans give the functional class from a point offset in this section's polyline to the next span's offset.
+      const spans = s.spans || [];
+      spans.forEach((sp, i) => {
+        if (!(sp.functionalClass <= 2)) return;
+        const end = i + 1 < spans.length ? spans[i + 1].offset : p.length - 1;
+        for (let k = sp.offset + 1; k <= end; k++) main += dist(p[k - 1], p[k]);
+      });
+      pts = pts.concat(pts.length ? p.slice(1) : p); dur += s.summary.duration; len += s.summary.length;
+    }
+    return { pts, dur, len, main };
   });
 }
 async function getFlow(b){
@@ -809,9 +844,11 @@ function score(route, idx, th){
   }
   return { cong, wjam, tot, hit };
 }
+// Lowest cost within the time limit: congested metres plus the road preference's cost for main-road metres.
 function choose(cands, fastDur, extraS){
+  const w = roadPref().weight, cost = c => c.s.cong + w * c.main;
   return cands.filter(c => c.dur <= fastDur + extraS)
-    .sort((x, y) => x.s.cong - y.s.cong || x.s.wjam - y.s.wjam || x.dur - y.dur)[0];
+    .sort((x, y) => cost(x) - cost(y) || x.s.wjam - y.s.wjam || x.dur - y.dur)[0];
 }
 function corridor(item){
   let pts = item.links.flat();
@@ -841,7 +878,7 @@ async function run(){
   const isCoord = v => /^\s*-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?\s*$/.test(v);
   const known = w => fieldPoint[w] && fieldPoint[w].text === $(w).value;
   const geocodes = ['from', 'to'].filter(w => !isCoord($(w).value) && !known(w)).length;
-  const over = checkSpend({ geocode: geocodes, routing: 1 + ROUNDS, flow: 1 });
+  const over = checkSpend({ geocode: geocodes, routing: 1 + ROUNDS + (roadPref().caps ? 1 : 0), flow: 1 });
   if (over) { status('Comparison not started. ' + over, true); return; }
   $('go').disabled = true; $('recalc').disabled = true; $('recalc').classList.add('busy');
   try {
@@ -855,6 +892,10 @@ async function run(){
     status('Getting HERE routes…');
     const cands = (await getRoutes(o, d, 5, [])).map((r, i) => ({ ...r, label: i ? 'Alternative ' + i : 'Fastest' }));
     if (!cands.length) throw new Error('HERE returned no route between these points.');
+    if (roadPref().caps) {
+      status('Getting routes on smaller roads…');
+      (await getRoutes(o, d, 2, [], true)).forEach((r, i) => { if (!isDupe(r, cands)) { r.label = 'Smaller roads' + (i ? ', variant' : ''); cands.push(r); } });
+    }
 
     status('Getting live traffic…');
     const box = bounds(cands);
@@ -871,7 +912,7 @@ async function run(){
       for (const [it] of fresh) { if (avoid.size >= MAX_AVOID) break; avoid.set(it, corridor(it)); }
       status('Routing around ' + avoid.size + (avoid.size === 1 ? ' congested stretch' : ' congested stretches') + ' (round ' + round + ')…');
       let rs;
-      try { rs = await getRoutes(o, d, 3, [...avoid.values()]); }
+      try { rs = await getRoutes(o, d, 3, [...avoid.values()], true); }
       catch (err) { status('Avoidance round ' + round + ' failed: ' + err.message, true); break; }
       if (!rs.length) break;
       rs.forEach(r => r.s = score(r, idx, th));
@@ -910,7 +951,7 @@ const jamColour = jf => jf >= 8 ? '#8b0000' : jf >= 6 ? '#e8251a' : jf >= 4 ? '#
 function cmpRow(title, r, ref, colour, dashed){
   const pct = r.s.tot ? Math.round(100 * r.s.cong / r.s.tot) : 0, dt = r.dur - ref.dur;
   return `<div class="cmprow"><span class="sw${dashed ? ' dash' : ''}" style="--c:${colour}"></span>
-    <div><div class="cmptitle">${title}</div><div class="muted">${km(r.len)} · ${km(r.s.cong)} congested (${pct}%)</div></div>
+    <div><div class="cmptitle">${title}</div><div class="muted">${km(r.len)} · ${km(r.s.cong)} congested (${pct}%)${roadPref().caps ? ' · ' + km(r.main) + ' on main roads' : ''}</div></div>
     <div class="cmptime"><b>${fmtT(r.dur)}</b>${dt > 30 ? `<span class="muted">+${fmtT(dt)}</span>` : ''}</div></div>`;
 }
 function render(selected, fit){
@@ -932,11 +973,14 @@ function render(selected, fit){
     : 'The chosen route spends ' + km(saved) + ' less in congestion for ' + fmtT(Math.max(0, best.dur - fastest.dur)) + ' extra.';
   $('cards').innerHTML = selected === fastest
     ? cmpRow(best === fastest ? 'Fastest and least congested' : 'Fastest', fastest, fastest, '#1f6feb')
-    : cmpRow(selected === best ? 'Least congested' : selected.label, selected, fastest, '#1f6feb') + cmpRow('Fastest', fastest, fastest, '#4b555e', true);
+    : cmpRow(selected === best ? (roadPref().caps ? 'Recommended' : 'Least congested') : selected.label, selected, fastest, '#1f6feb') + cmpRow('Fastest', fastest, fastest, '#4b555e', true);
   $('ncand').textContent = cands.length;
   $('tbody').innerHTML = cands.map((c, i) => `<tr data-i="${i}" class="${c === selected ? 'sel' : ''}${c.dur > fastest.dur + extraS ? ' over' : ''}"><td>${c.label}${c === best ? ' <span class="tag">Chosen</span>' : ''}</td><td>${fmtT(c.dur)}</td><td>${km(c.len)}</td><td>${km(c.s.cong)}</td></tr>`).join('');
   $('results').hidden = false;
 }
+const savedPref = store.get('roadPref');
+if (savedPref && ROADPREF[savedPref]) $('roadpref').value = savedPref;
+showRoadDesc();
 if (!key()) status(NEED_KEY);
 $('tbody').addEventListener('click', e => { const tr = e.target.closest('tr'); if (tr && lastRun) render(lastRun.cands[+tr.dataset.i]); });
 }
