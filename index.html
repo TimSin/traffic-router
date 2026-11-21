@@ -71,6 +71,10 @@ tbody tr.sel{outline:2px solid var(--blue);outline-offset:-2px}
 .meter.warn .bar i{background:#f08a00}.meter.full .bar i{background:var(--red)}
 #usagenote.err{color:var(--red)}
 #map{height:100%;width:100%}
+.view{display:flex;flex-direction:column;gap:inherit}
+.view[hidden]{display:none}
+.titlebar{display:flex;justify-content:space-between;align-items:center;gap:10px}
+#keymsg.err{color:var(--red)}
 .linkbtn{border:0;background:none;color:var(--blue);padding:0;min-height:36px;font-size:14px;font-weight:500}
 .sheet-bar{display:none}
 @media(max-width:800px){
@@ -86,19 +90,24 @@ tbody tr.sel{outline:2px solid var(--blue);outline-offset:-2px}
 </head>
 <body>
 <aside id="sheet">
-  <div class="sheet-bar"><p id="summary">Congestion router</p><button type="button" id="sheetToggle" aria-expanded="true" aria-controls="sheet">Hide</button></div>
+  <div class="sheet-bar"><p id="summary">Congestion router</p><button type="button" class="settingsBtn" aria-pressed="false">Settings</button><button type="button" id="sheetToggle" aria-expanded="true" aria-controls="sheet">Hide</button></div>
   <div class="intro">
-    <h1>Congestion router</h1>
+    <div class="titlebar"><h1>Congestion router</h1><button type="button" class="settingsBtn" aria-pressed="false">Settings</button></div>
     <p class="muted">Compares HERE's fastest route with the least congested route within your extra-time limit.</p>
   </div>
 
-  <details id="keybox">
-    <summary>HERE API key</summary>
-    <label for="key">Key</label>
-    <input id="key" type="password" autocomplete="off" spellcheck="false">
-    <p class="muted" style="margin-top:6px"><label style="display:inline;margin:0"><input id="remember" type="checkbox" style="width:auto;min-height:0;vertical-align:middle"> Remember in this browser</label></p>
-  </details>
+  <section id="settings" class="view" hidden>
+    <h2>Settings</h2>
+    <div>
+      <label for="key">HERE API key</label>
+      <input id="key" type="password" autocomplete="off" spellcheck="false">
+      <p class="muted" style="margin-top:6px"><label style="display:inline;margin:0"><input id="remember" type="checkbox" style="width:auto;min-height:0;vertical-align:middle"> Remember in this browser</label></p>
+      <p id="keymsg" class="muted" style="margin-top:6px"></p>
+    </div>
+    <p class="muted">The key is used only for requests from this page to HERE. If you tick "Remember in this browser", it is kept in this browser's local storage and nowhere else. You can create a key at <a href="https://platform.here.com">platform.here.com</a>.</p>
+  </section>
 
+  <div id="mainview" class="view">
   <form id="form">
     <label for="from">From</label>
     <div class="row"><input id="from" placeholder="Address, postcode or lat, lng" autocomplete="off"><button type="button" class="pick" data-for="from" aria-pressed="false">Pick on map</button></div>
@@ -162,6 +171,7 @@ tbody tr.sel{outline:2px solid var(--blue);outline-offset:-2px}
     <div id="meters" style="margin-top:12px"></div>
     <p class="muted" id="usagenote" style="margin-top:8px"></p>
   </details>
+  </div>
 </aside>
 <div id="map"></div>
 
@@ -187,11 +197,23 @@ const store = {
   set(k,v){ try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k,v); } catch {} }
 };
 const saved = store.get('hereKey');
-if (saved) { $('key').value = saved; $('remember').checked = true; } else { $('keybox').open = true; }
+if (saved) { $('key').value = saved; $('remember').checked = true; }
 const key = () => $('key').value.trim();
 function persistKey(){ store.set('hereKey', $('remember').checked && key() ? key() : null); }
 $('key').addEventListener('change', () => { persistKey(); setTiles(); });
 $('remember').addEventListener('change', persistKey);
+$('key').addEventListener('input', () => { $('keymsg').textContent = ''; $('keymsg').className = 'muted'; });
+
+// ---------- Settings view ----------
+function showSettings(on, msg){
+  $('settings').hidden = !on;
+  $('mainview').hidden = on;
+  document.querySelectorAll('.settingsBtn').forEach(b => { b.textContent = on ? 'Done' : 'Settings'; b.setAttribute('aria-pressed', String(on)); });
+  $('keymsg').textContent = msg || '';
+  $('keymsg').className = msg ? 'muted err' : 'muted';
+  if (on) { setSheet(true); $('key').focus(); }
+}
+document.querySelectorAll('.settingsBtn').forEach(b => b.addEventListener('click', () => showSettings($('settings').hidden)));
 
 // ---------- Free allowance limit ----------
 // Counts every request this page makes, by service, for the current UTC calendar month and UTC day.
@@ -495,7 +517,7 @@ function status(msg, err){
 }
 $('form').addEventListener('submit', async e => {
   e.preventDefault();
-  if (!key()) { $('keybox').open = true; $('key').focus(); status('Enter your HERE API key first.', true); return; }
+  if (!key()) { showSettings(true, 'Enter your HERE API key first.'); return; }
   if (!$('from').value.trim() || !$('to').value.trim()) { status('Enter a start and a destination.', true); return; }
   const th = +$('th').value, extraS = Math.max(0, +$('extra').value || 0) * 60;
   const isCoord = v => /^\s*-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?\s*$/.test(v);
@@ -582,6 +604,7 @@ function render(selected, fit){
   $('tbody').innerHTML = cands.map((c, i) => `<tr data-i="${i}" class="${c === selected ? 'sel' : ''}"><td>${c.label}${c === best ? ' (chosen)' : ''}${c.dur > fastest.dur + extraS ? ' (over limit)' : ''}</td><td>${fmtT(c.dur)}</td><td>${km(c.len)}</td><td>${km(c.s.cong)}</td></tr>`).join('');
   $('results').hidden = false;
 }
+if (!key()) showSettings(true, 'Enter your HERE API key to start.');
 $('tbody').addEventListener('click', e => { const tr = e.target.closest('tr'); if (tr && lastRun) render(lastRun.cands[+tr.dataset.i]); });
 }
 </script>
