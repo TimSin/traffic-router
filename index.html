@@ -209,8 +209,8 @@ tr.over td{opacity:.45}
     <p id="verdict"></p>
     <div class="cmp" id="cards"></div>
     <div class="legend">
-      <span><i style="background:#f2c200"></i>Jam 2–4</span><span><i style="background:#f08a00"></i>4–6</span>
-      <span><i style="background:#e8251a"></i>6–8</span><span><i style="background:#8b0000"></i>8+ or closed</span>
+      <span><i style="background:#f2c200"></i>Light</span><span><i style="background:#f08a00"></i>Moderate to heavy</span>
+      <span><i style="background:#e8251a"></i>Very heavy</span><span><i style="background:#8b0000"></i>Standstill or closed</span>
     </div>
     <details class="cands">
       <summary><span>All routes compared (<span id="ncand">0</span>)</span><svg class="chev" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></summary>
@@ -241,16 +241,17 @@ tr.over td{opacity:.45}
     <details class="opts">
       <summary><span id="optsSummary"></span><svg class="chev" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></summary>
       <div class="grid2">
-        <div><label for="th">Congested from jam factor</label>
+        <div><label for="th">Avoid congestion level</label>
           <select id="th">
-            <option value="3">3 (busy)</option>
-            <option value="4" selected>4 (slow)</option>
-            <option value="5">5</option>
-            <option value="6">6 (heavy)</option>
-            <option value="8">8 (queuing)</option>
+            <option value="3">3 · Light</option>
+            <option value="4" selected>4 · Moderate</option>
+            <option value="5">5 · Heavy</option>
+            <option value="6">6 · Very heavy</option>
+            <option value="8">8 · Standstill</option>
           </select></div>
         <div><label for="extra">Max extra time (min)</label><input id="extra" type="number" inputmode="numeric" min="0" max="120" step="1" value="15"></div>
       </div>
+      <p class="muted" id="thdesc" style="margin-top:8px"></p>
     </details>
     <button class="primary" id="go" type="submit">Compare routes</button>
   </form>
@@ -293,8 +294,18 @@ $('remember').addEventListener('change', persistKey);
 $('key').addEventListener('input', () => { $('keymsg').textContent = ''; $('keymsg').className = 'muted'; });
 
 // ---------- Route options summary ----------
+// Congestion levels are HERE's jam factor (0 to 10). Each level counts that value and above as congested.
+const LEVELS = {
+  3: ['Avoid light congestion or worse', 'Avoids roads where traffic is a little slower than normal, as well as anything worse. Expect longer detours.'],
+  4: ['Avoid moderate congestion or worse', 'Avoids roads where traffic is noticeably slower than normal, as well as anything worse.'],
+  5: ['Avoid heavy congestion or worse', 'Avoids slow-moving traffic and anything worse.'],
+  6: ['Avoid very heavy congestion or worse', 'Avoids crawling traffic and queues; accepts slower but moving roads.'],
+  8: ['Avoid standstill traffic only', 'Avoids only queues, stopped traffic and closed roads.']
+};
 function optsSummary(){
-  $('optsSummary').textContent = 'Avoid jam factor ' + $('th').value + '+, up to ' + (Math.max(0, +$('extra').value || 0)) + ' min extra';
+  const [phrase, desc] = LEVELS[$('th').value];
+  $('optsSummary').textContent = phrase + ', up to ' + (Math.max(0, +$('extra').value || 0)) + ' min extra';
+  $('thdesc').textContent = desc;
 }
 $('th').addEventListener('change', optsSummary);
 $('extra').addEventListener('input', optsSummary);
@@ -361,7 +372,7 @@ $('favok').addEventListener('click', async () => {
 renderFavs();
 
 // ---------- Reload and version ----------
-const APP_VERSION = '2026-11-21.10';
+const APP_VERSION = '2026-11-21.11';
 $('version').textContent = 'Version ' + APP_VERSION + '.';
 // Re-requesting the page with cache: 'reload' replaces the browser's cached copy before reloading.
 $('reload').addEventListener('click', () => {
