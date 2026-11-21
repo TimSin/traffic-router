@@ -17,7 +17,11 @@ On an iPhone, open the GitHub Pages address in Safari and choose Share, then Add
 
 ## Base map
 
-The map background uses OpenStreetMap's standard tiles by default, so only routing, traffic and geocoding requests count against the HERE allowance. HERE's own tiles can be chosen under Settings. OpenStreetMap's tiles must be requested with a Referer header, so they load from the hosted page but not from a copy of the file opened directly from disk; use the HERE base map in that case.
+The map background uses Tracestrack Topo by default. It needs a Tracestrack API key, entered under Settings; Tracestrack's free plan is for non-commercial use and allows 100,000 tile requests a month. Until a key is entered, OpenStreetMap's standard tiles are shown. HERE's own tiles can also be chosen, and count against the HERE allowance. OpenStreetMap's tiles must be requested with a Referer header, so they load from the hosted page but not from a copy of the file opened directly from disk.
+
+## Favourites and recalculating
+
+Locations can be saved as favourites with "+ Save favourite" under the start and destination. They are kept as names and coordinates in the browser's local storage and can be deleted under Settings. The button at the top left of the map runs the last comparison again with the same inputs, using live traffic at that moment.
 
 ## Free allowance limit
 
