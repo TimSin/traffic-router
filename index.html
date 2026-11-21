@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Congestion router</title>
+<meta name="theme-color" content="#16191c">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Router">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* VOICE: plain working tool, control-room calm.
+   IDEA: a dispatcher's route board beside a live traffic map.
+   PICTURE: the map itself, congestion drawn from the same data used for scoring.
+   COLOUR and TYPE: steel panel, black ink, one blue for the chosen route, traffic colours for jams; Inter Tight + Inter.
+   LAYOUT: controls and results in a left column, map filling the rest; below 800px the map fills the screen and the controls sit in a bottom sheet. */
+:root{color-scheme:light dark;
+  --bg:light-dark(#eef1f3,#16191c);--panel:light-dark(#ffffff,#1f2327);--ink:light-dark(#111417,#e8ebee);
+  --muted:light-dark(#5b646c,#9aa4ad);--line:light-dark(#d5dbe0,#30363c);--blue:#1f6feb;--red:#e8251a}
+:root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 Inter,system-ui,sans-serif;display:grid;grid-template-columns:400px 1fr}
+aside{background:var(--panel);border-right:1px solid var(--line);overflow-y:auto;padding:20px 20px 28px;display:flex;flex-direction:column;gap:18px}
+h1{font:600 26px/1.1 "Inter Tight",Inter,sans-serif;margin:0}
+h2{font:600 15px/1.3 Inter,sans-serif;margin:0 0 8px}
+p{margin:0}.muted{color:var(--muted);font-size:13px}
+label{display:block;font-size:13px;color:var(--muted);margin-bottom:4px}
+.row{display:flex;gap:8px;align-items:stretch}
+input,select,button{font:inherit;font-size:16px;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:6px;min-height:44px;padding:0 10px}
+input,select{width:100%}
+.row>input{flex:1 1 0;width:auto}
+.row>button{flex:none;min-width:max-content}
+.row>button.primary{flex:1 1 0;width:auto}
+button{cursor:pointer;white-space:nowrap}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--blue);outline-offset:1px}
+button.primary{background:var(--blue);border-color:var(--blue);color:#fff;font-weight:600;width:100%}
+button.primary:disabled{opacity:.6;cursor:wait}
+button.pick[aria-pressed=true]{background:var(--blue);color:#fff;border-color:var(--blue)}
+.grid2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px}
+details{border:1px solid var(--line);border-radius:6px;padding:10px 12px}
+summary{cursor:pointer;font-weight:500}
+details[open] summary{margin-bottom:10px}
+#status{font-size:13px;min-height:20px}
+#status.err{color:var(--red)}
+.cards{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px}
+.card{border:1px solid var(--line);border-radius:8px;padding:12px;border-top:5px solid #6b7680}
+.card.best{border-top-color:var(--blue)}
+.card .big{font:600 30px/1.1 "Inter Tight",Inter,sans-serif;white-space:nowrap}
+.card dl{display:grid;grid-template-columns:auto auto;gap:2px 10px;margin:8px 0 0;font-size:13px}
+.card dt{color:var(--muted)}.card dd{margin:0;text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+#verdict{font-size:14px}
+table{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}
+th,td{padding:6px 4px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+th:first-child,td:first-child{text-align:left;white-space:normal}
+tbody tr{cursor:pointer}tbody tr:hover{background:light-dark(#f2f5f7,#262b30)}
+tbody tr.sel{outline:2px solid var(--blue);outline-offset:-2px}
+.legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12px;color:var(--muted)}
+.legend i{display:inline-block;width:18px;height:4px;border-radius:2px;vertical-align:middle;margin-right:5px}
+.meter{margin-bottom:8px;font-size:13px}
+.meter .top{display:flex;justify-content:space-between;gap:8px}
+.meter .top span:last-child{font-variant-numeric:tabular-nums;white-space:nowrap}
+.meter .bar{height:6px;border-radius:3px;background:var(--line);overflow:hidden;margin-top:3px}
+.meter .bar i{display:block;height:100%;background:var(--blue)}
+.meter.warn .bar i{background:#f08a00}.meter.full .bar i{background:var(--red)}
+#usagenote.err{color:var(--red)}
+#map{height:100%;width:100%}
+.linkbtn{border:0;background:none;color:var(--blue);padding:0;min-height:36px;font-size:14px;font-weight:500}
+.sheet-bar{display:none}
+@media(max-width:800px){
+  body{display:block;height:100dvh;overflow:hidden}
+  #map{position:fixed;inset:0;height:auto}
+  aside{position:fixed;left:0;right:0;bottom:0;z-index:1000;max-height:78dvh;border-right:0;border-top:1px solid var(--line);border-radius:14px 14px 0 0;box-shadow:0 -4px 20px rgba(0,0,0,.25);padding:0 16px calc(20px + env(safe-area-inset-bottom));gap:16px}
+  aside.collapsed{overflow:hidden;max-height:calc(57px + env(safe-area-inset-bottom))}
+  .sheet-bar{display:flex;position:sticky;top:0;z-index:1;background:var(--panel);align-items:center;gap:10px;min-height:56px;margin:0 -16px;padding:6px 16px;border-bottom:1px solid var(--line)}
+  #summary{flex:1;font-size:14px;line-height:1.3}
+  .intro{display:none}
+}
+</style>
+</head>
+<body>
+<aside id="sheet">
+  <div class="sheet-bar"><p id="summary">Congestion router</p><button type="button" id="sheetToggle" aria-expanded="true" aria-controls="sheet">Hide</button></div>
+  <div class="intro">
+    <h1>Congestion router</h1>
+    <p class="muted">Compares HERE's fastest route with the least congested route within your extra-time limit.</p>
+  </div>
+
+  <details id="keybox">
+    <summary>HERE API key</summary>
+    <label for="key">Key</label>
+    <input id="key" type="password" autocomplete="off" spellcheck="false">
+    <p class="muted" style="margin-top:6px"><label style="display:inline;margin:0"><input id="remember" type="checkbox" style="width:auto;min-height:0;vertical-align:middle"> Remember in this browser</label></p>
+  </details>
+
+  <form id="form">
+    <label for="from">From</label>
+    <div class="row"><input id="from" placeholder="Address, postcode or lat, lng" autocomplete="off"><button type="button" class="pick" data-for="from" aria-pressed="false">Pick on map</button></div>
+    <button type="button" id="locate" class="linkbtn">Use my location</button>
+    <div style="height:4px"></div>
+    <label for="to">To</label>
+    <div class="row"><input id="to" placeholder="Address, postcode or lat, lng" autocomplete="off"><button type="button" class="pick" data-for="to" aria-pressed="false">Pick on map</button></div>
+    <div style="height:10px"></div>
+    <div class="grid2">
+      <div><label for="th">Congested from jam factor</label>
+        <select id="th">
+          <option value="3">3 (busy)</option>
+          <option value="4" selected>4 (slow)</option>
+          <option value="5">5</option>
+          <option value="6">6 (heavy)</option>
+          <option value="8">8 (queuing)</option>
+        </select></div>
+      <div><label for="extra">Max extra time (min)</label><input id="extra" type="number" min="0" max="120" step="1" value="15"></div>
+    </div>
+    <div style="height:12px"></div>
+    <div class="row"><button type="button" id="swap">Swap</button><button class="primary" id="go" type="submit">Compare routes</button></div>
+  </form>
+
+  <p id="status" role="status"></p>
+
+  <section id="results" hidden>
+    <p id="verdict"></p>
+    <div style="height:10px"></div>
+    <div class="cards" id="cards"></div>
+    <div style="height:14px"></div>
+    <h2>All candidate routes</h2>
+    <table><thead><tr><th>Route</th><th>Time</th><th>Distance</th><th>Congested</th></tr></thead><tbody id="tbody"></tbody></table>
+  </section>
+
+  <div>
+    <div class="legend">
+      <span><i style="background:#f2c200"></i>Jam 2–4</span><span><i style="background:#f08a00"></i>4–6</span>
+      <span><i style="background:#e8251a"></i>6–8</span><span><i style="background:#8b0000"></i>8+ / closed</span>
+      <span><i style="background:#1f6feb"></i>Chosen</span><span><i style="background:#6b7680"></i>Fastest</span>
+    </div>
+  </div>
+
+  <details id="usagebox" open>
+    <summary>Free allowance limit</summary>
+    <div class="grid2">
+      <div><label for="plan">HERE plan</label>
+        <select id="plan">
+          <option value="base">Base (monthly)</option>
+          <option value="limited">Limited (daily)</option>
+        </select></div>
+      <div><label for="pct">Stop at % of allowance</label><input id="pct" type="number" min="10" max="100" step="5" value="90"></div>
+    </div>
+    <div id="meters" style="margin-top:12px"></div>
+    <p class="muted" id="usagenote" style="margin-top:8px"></p>
+  </details>
+</aside>
+<div id="map"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+{
+// ---------- Settings ----------
+const MIN_JF = 2;          // Flow items below this jam factor are not fetched; they count as free-flowing.
+const MATCH_M = 12;        // Max distance in metres between a route sample and a flow segment for them to match.
+const MAX_BEARING = 40;    // Max direction difference in degrees, so the opposite carriageway is not matched.
+const SAMPLE_M = 25;       // Route sampling interval in metres.
+const CORRIDOR_R = 12;     // Radius in metres of each avoid corridor.
+const MAX_AVOID = 20;      // Max avoid areas per routing request, to keep the URL a reasonable length.
+const ROUNDS = 3;          // Max avoidance rounds after the first routing request.
+const CELL = 0.002;        // Spatial index cell size in degrees.
+
+const $ = id => document.getElementById(id);
+let picking = null, layers = null, lastRun = null;
+
+// ---------- API key ----------
+const store = {
+  get(k){ try { return localStorage.getItem(k); } catch { return null; } },
+  set(k,v){ try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k,v); } catch {} }
+};
+const saved = store.get('hereKey');
+if (saved) { $('key').value = saved; $('remember').checked = true; } else { $('keybox').open = true; }
+const key = () => $('key').value.trim();
+function persistKey(){ store.set('hereKey', $('remember').checked && key() ? key() : null); }
+$('key').addEventListener('change', () => { persistKey(); setTiles(); });
+$('remember').addEventListener('change', persistKey);
+
+// ---------- Free allowance limit ----------
+// Counts every request this page makes, by service, for the current UTC calendar month and UTC day.
+// A request is refused before it is sent if it would take the count past the chosen share of the allowance.
+const ALLOW = { routing: 30000, flow: 5000, geocode: 30000, tiles: 30000 };   // Base plan free allowances per month
+const DAILY = 1000;                                                           // Limited plan requests per day, all services
+const NAMES = { routing: 'Routing', flow: 'Traffic flow', geocode: 'Geocoding', tiles: 'Map tiles' };
+let memUsage = null, storageOK = true;
+const monthKey = () => new Date().toISOString().slice(0, 7);
+const dayKey = () => new Date().toISOString().slice(0, 10);
+const plan = () => $('plan').value;
+const share = () => Math.min(100, Math.max(10, +$('pct').value || 90)) / 100;
+const sum = c => Object.values(c).reduce((a, b) => a + b, 0);
+const reqs = n => n + (n === 1 ? ' request' : ' requests');
+
+function loadUsage(){
+  let u = null;
+  try { const raw = localStorage.getItem('hereUsage'); u = raw ? JSON.parse(raw) : null; }
+  catch { storageOK = false; u = memUsage; }
+  if (!storageOK) u = memUsage;
+  u = u || {};
+  if (!u.month || u.month.p !== monthKey()) u.month = { p: monthKey(), c: {} };
+  if (!u.day || u.day.p !== dayKey()) u.day = { p: dayKey(), c: {} };
+  return u;
+}
+function saveUsage(u){
+  memUsage = u;
+  try { localStorage.setItem('hereUsage', JSON.stringify(u)); } catch { storageOK = false; }
+}
+// Returns null if the requests can be made, or a sentence saying which limit they would exceed.
+function checkSpend(need){
+  const u = loadUsage();
+  if (plan() === 'limited') {
+    const limit = Math.floor(DAILY * share()), left = limit - sum(u.day.c), n = sum(need);
+    return n > left ? 'This needs up to ' + reqs(n) + ', and ' + Math.max(0, left) + ' ' + (left === 1 ? 'is' : 'are') + ' left under today\'s limit of ' + limit + '.' : null;
+  }
+  for (const [s, n] of Object.entries(need)) {
+    const limit = Math.floor(ALLOW[s] * share()), left = limit - (u.month.c[s] || 0);
+    if (n > left) return NAMES[s] + ': this needs up to ' + reqs(n) + ', and ' + Math.max(0, left) + ' ' + (left === 1 ? 'is' : 'are') + ' left under this month\'s limit of ' + limit.toLocaleString('en-GB') + '.';
+  }
+  return null;
+}
+function spend(s){
+  const u = loadUsage();
+  u.month.c[s] = (u.month.c[s] || 0) + 1;
+  u.day.c[s] = (u.day.c[s] || 0) + 1;
+  saveUsage(u);
+  renderUsage();
+}
+function meter(label, used, limit){
+  const pct = limit ? Math.min(100, 100 * used / limit) : 100;
+  return `<div class="meter ${pct >= 100 ? 'full' : pct >= 80 ? 'warn' : ''}"><div class="top"><span>${label}</span><span>${used.toLocaleString('en-GB')} / ${limit.toLocaleString('en-GB')}</span></div><div class="bar"><i style="width:${pct}%"></i></div></div>`;
+}
+let renderQueued = false;
+function renderUsage(){
+  if (renderQueued) return;
+  renderQueued = true;
+  requestAnimationFrame(() => {
+    renderQueued = false;
+    const u = loadUsage();
+    $('meters').innerHTML = plan() === 'limited'
+      ? meter('All requests today', sum(u.day.c), Math.floor(DAILY * share()))
+      : Object.keys(ALLOW).map(s => meter(NAMES[s] + ' this month', u.month.c[s] || 0, Math.floor(ALLOW[s] * share()))).join('');
+    const note = $('usagenote');
+    note.className = storageOK ? 'muted' : 'muted err';
+    note.textContent = (storageOK
+      ? 'Counts are kept in this browser only. Requests made from another browser, another device, or after clearing site data are not included. '
+      : 'This browser is not keeping the counts, so the limit only covers requests made since the page was opened. ')
+      + (plan() === 'limited' ? 'The count resets at midnight UTC.' : 'The counts reset on the 1st of each month (UTC).');
+  });
+}
+const savedPlan = store.get('herePlan'), savedPct = store.get('herePct');
+if (savedPlan) $('plan').value = savedPlan;
+if (savedPct) $('pct').value = savedPct;
+for (const id of ['plan', 'pct']) $(id).addEventListener('change', () => {
+  store.set('herePlan', $('plan').value); store.set('herePct', String(share() * 100));
+  renderUsage(); if (tiles) tiles.redraw();
+});
+renderUsage();
+
+// ---------- Map ----------
+const map = L.map('map', { preferCanvas: true }).setView([51.507, -0.1276], 11);
+let tiles = null, tilesWarned = false;
+// Tile layer that refuses to request a tile once the tile limit is reached, showing a blank square instead.
+const GuardedTiles = L.TileLayer.extend({
+  createTile(coords, done){
+    if (checkSpend({ tiles: 1 })) {
+      const el = document.createElement('div');
+      setTimeout(() => done(null, el), 0);
+      if (!tilesWarned) { tilesWarned = true; status('Map tiles have stopped loading because the tile limit has been reached. Route comparisons still work.', true); }
+      return el;
+    }
+    spend('tiles');
+    return L.TileLayer.prototype.createTile.call(this, coords, done);
+  }
+});
+function setTiles(){
+  if (tiles) { map.removeLayer(tiles); tiles = null; }
+  if (!key()) return;
+  tiles = new GuardedTiles('https://maps.hereapi.com/v3/base/mc/{z}/{x}/{y}/png?style=lite.day&size=512&apiKey=' + encodeURIComponent(key()),
+    { tileSize: 512, zoomOffset: -1, maxZoom: 19, attribution: '&copy; HERE' }).addTo(map);
+}
+setTiles();
+
+const marks = { from: null, to: null };
+function setMark(which, lat, lng){
+  if (marks[which]) map.removeLayer(marks[which]);
+  marks[which] = L.circleMarker([lat, lng], { radius: 8, weight: 3, color: '#fff',
+    fillColor: which === 'from' ? '#1a7f37' : '#111417', fillOpacity: 1 }).addTo(map);
+}
+document.querySelectorAll('.pick').forEach(b => b.addEventListener('click', () => {
+  const which = b.dataset.for;
+  picking = picking === which ? null : which;
+  document.querySelectorAll('.pick').forEach(x => x.setAttribute('aria-pressed', String(x.dataset.for === picking)));
+  map.getContainer().style.cursor = picking ? 'crosshair' : '';
+  if (phone.matches) setSheet(!picking);
+}));
+map.on('click', e => {
+  if (!picking) return;
+  $(picking).value = e.latlng.lat.toFixed(5) + ', ' + e.latlng.lng.toFixed(5);
+  setMark(picking, e.latlng.lat, e.latlng.lng);
+  picking = null;
+  document.querySelectorAll('.pick').forEach(x => x.setAttribute('aria-pressed', 'false'));
+  map.getContainer().style.cursor = '';
+  if (phone.matches) setSheet(true);
+});
+$('swap').addEventListener('click', () => { const a = $('from').value; $('from').value = $('to').value; $('to').value = a; });
+
+// ---------- Phone layout: bottom sheet ----------
+const phone = window.matchMedia('(max-width: 800px)');
+function setSheet(open){
+  $('sheet').classList.toggle('collapsed', !open);
+  $('sheetToggle').textContent = open ? 'Hide' : 'Show';
+  $('sheetToggle').setAttribute('aria-expanded', String(open));
+  setTimeout(() => map.invalidateSize(), 250);
+}
+$('sheetToggle').addEventListener('click', () => setSheet($('sheet').classList.contains('collapsed')));
+phone.addEventListener('change', () => { setSheet(true); });
+
+// ---------- Current location ----------
+$('locate').addEventListener('click', () => {
+  if (!navigator.geolocation) { status('This browser cannot provide your location.', true); return; }
+  status('Finding your location…');
+  navigator.geolocation.getCurrentPosition(p => {
+    const lat = p.coords.latitude, lng = p.coords.longitude;
+    $('from').value = lat.toFixed(5) + ', ' + lng.toFixed(5);
+    setMark('from', lat, lng);
+    map.setView([lat, lng], 14);
+    status('Start set to your location, accurate to about ' + Math.round(p.coords.accuracy) + ' m.');
+  }, err => {
+    status(err.code === 1 ? 'Location access was refused. You can allow it for this site in your browser or phone settings.' : 'Could not get your location: ' + err.message, true);
+  }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 });
+});
+
+// ---------- Geometry ----------
+const R2D = 180 / Math.PI, D2R = Math.PI / 180;
+function dist(a, b){ const kx = 111320 * Math.cos(a[0] * D2R); const dx = (b[1]-a[1]) * kx, dy = (b[0]-a[0]) * 110540; return Math.hypot(dx, dy); }
+function bearing(a, b){ const kx = Math.cos(a[0] * D2R); return (Math.atan2((b[1]-a[1]) * kx, b[0]-a[0]) * R2D + 360) % 360; }
+function angDiff(x, y){ const d = Math.abs(x - y) % 360; return d > 180 ? 360 - d : d; }
+function distToSeg(p, a, b){
+  const kx = 111320 * Math.cos(p[0] * D2R), ky = 110540;
+  const ax = (a[1]-p[1]) * kx, ay = (a[0]-p[0]) * ky, bx = (b[1]-p[1]) * kx, by = (b[0]-p[0]) * ky;
+  const vx = bx - ax, vy = by - ay, L2 = vx*vx + vy*vy;
+  let t = L2 ? -(ax*vx + ay*vy) / L2 : 0; t = Math.max(0, Math.min(1, t));
+  return Math.hypot(ax + t*vx, ay + t*vy);
+}
+
+// ---------- HERE flexible polyline decoder ----------
+const FP = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+const FPT = {}; [...FP].forEach((c, i) => FPT[c] = i);
+function decodeFP(s){
+  let i = 0;
+  const uvar = () => { let r = 0, m = 1, v; do { v = FPT[s[i++]]; if (v === undefined) throw new Error('Unreadable route polyline'); r += (v & 31) * m; m *= 32; } while (v & 32); return r; };
+  const svar = () => { const u = uvar(); return u % 2 ? -(u + 1) / 2 : u / 2; };
+  uvar();                                   // format version
+  const h = uvar(), f = 10 ** (h & 15), third = (h >> 4) & 7;
+  let lat = 0, lng = 0; const pts = [];
+  while (i < s.length) { lat += svar(); lng += svar(); if (third) svar(); pts.push([lat / f, lng / f]); }
+  return pts;
+}
+
+// ---------- API calls ----------
+async function api(url, svc){
+  const over = checkSpend({ [svc]: 1 });
+  if (over) throw new Error('Request not sent. ' + over);
+  spend(svc);
+  let r;
+  try { r = await fetch(url); } catch { throw new Error('Network request failed. If this keeps happening, open the page through a local web server instead of directly from disk.'); }
+  let j = null; try { j = await r.json(); } catch {}
+  if (!r.ok) {
+    const t = j && (j.title || j.error_description || j.message);
+    throw new Error(t ? t + (j.cause ? ': ' + j.cause : '') : 'HERE returned HTTP ' + r.status + '.');
+  }
+  return j;
+}
+async function locate(text){
+  const m = text.trim().match(/^(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)$/);
+  if (m) return { lat: +m[1], lng: +m[2] };
+  const j = await api('https://geocode.search.hereapi.com/v1/geocode?q=' + encodeURIComponent(text) + '&in=countryCode:GBR&limit=1&apiKey=' + encodeURIComponent(key()), 'geocode');
+  if (!j.items || !j.items.length) throw new Error('No match found for "' + text + '".');
+  return j.items[0].position;
+}
+async function getRoutes(o, d, alts, avoid){
+  let u = 'https://router.hereapi.com/v8/routes?transportMode=car&origin=' + o.lat + ',' + o.lng + '&destination=' + d.lat + ',' + d.lng +
+          '&return=polyline,summary&alternatives=' + alts + '&apiKey=' + encodeURIComponent(key());
+  if (avoid.length) u += '&avoid[areas]=' + encodeURIComponent(avoid.join('|'));
+  const j = await api(u, 'routing');
+  return (j.routes || []).map(r => {
+    let pts = [], dur = 0, len = 0;
+    for (const s of r.sections) { const p = decodeFP(s.polyline); pts = pts.concat(pts.length ? p.slice(1) : p); dur += s.summary.duration; len += s.summary.length; }
+    return { pts, dur, len };
+  });
+}
+async function getFlow(b){
+  const u = 'https://data.traffic.hereapi.com/v7/flow?in=bbox:' + [b.w, b.s, b.e, b.n].map(x => x.toFixed(5)).join(',') +
+            '&locationReferencing=shape&minJamFactor=' + MIN_JF + '&apiKey=' + encodeURIComponent(key());
+  return api(u, 'flow');
+}
+
+// ---------- Traffic index and scoring ----------
+function buildIndex(flow){
+  const grid = new Map(), items = [];
+  for (const r of flow.results || []) {
+    const cf = r.currentFlow || {}, shape = r.location && r.location.shape;
+    if (!shape) continue;
+    const item = { jf: cf.traversability === 'closed' ? 10 : (cf.jamFactor || 0),
+                   links: shape.links.map(l => l.points.map(p => [p.lat, p.lng])), desc: r.location.description || '' };
+    items.push(item);
+    for (const pts of item.links) for (let k = 1; k < pts.length; k++) {
+      const a = pts[k-1], b = pts[k], seg = { a, b, item, brg: bearing(a, b) };
+      const i0 = Math.floor(Math.min(a[0], b[0]) / CELL), i1 = Math.floor(Math.max(a[0], b[0]) / CELL);
+      const j0 = Math.floor(Math.min(a[1], b[1]) / CELL), j1 = Math.floor(Math.max(a[1], b[1]) / CELL);
+      for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) {
+        const key = i + ',' + j; let c = grid.get(key); if (!c) grid.set(key, c = []); c.push(seg);
+      }
+    }
+  }
+  return { grid, items };
+}
+function matchJam(p, brg, idx){
+  const i = Math.floor(p[0] / CELL), j = Math.floor(p[1] / CELL);
+  let best = null, bd = MATCH_M;
+  for (let di = -1; di <= 1; di++) for (let dj = -1; dj <= 1; dj++) {
+    const c = idx.grid.get((i + di) + ',' + (j + dj)); if (!c) continue;
+    for (const s of c) {
+      if (angDiff(brg, s.brg) > MAX_BEARING) continue;
+      const d = distToSeg(p, s.a, s.b); if (d < bd) { bd = d; best = s.item; }
+    }
+  }
+  return best;
+}
+function score(route, idx, th){
+  let cong = 0, wjam = 0, tot = 0; const hit = new Map();
+  const P = route.pts;
+  for (let k = 1; k < P.length; k++) {
+    const a = P[k-1], b = P[k], L = dist(a, b); if (L < 0.5) continue;
+    const brg = bearing(a, b), n = Math.max(1, Math.ceil(L / SAMPLE_M)), seg = L / n;
+    for (let s = 0; s < n; s++) {
+      const t = (s + 0.5) / n, p = [a[0] + (b[0]-a[0]) * t, a[1] + (b[1]-a[1]) * t];
+      const it = matchJam(p, brg, idx), jf = it ? it.jf : 0;
+      tot += seg; wjam += jf * seg;
+      if (it && jf >= th) { cong += seg; hit.set(it, (hit.get(it) || 0) + seg); }
+    }
+  }
+  return { cong, wjam, tot, hit };
+}
+function choose(cands, fastDur, extraS){
+  return cands.filter(c => c.dur <= fastDur + extraS)
+    .sort((x, y) => x.s.cong - y.s.cong || x.s.wjam - y.s.wjam || x.dur - y.dur)[0];
+}
+function corridor(item){
+  let pts = item.links.flat();
+  if (pts.length > 30) { const step = (pts.length - 1) / 29; pts = Array.from({ length: 30 }, (_, i) => pts[Math.round(i * step)]); }
+  return 'corridor:' + pts.map(p => p[0].toFixed(5) + ',' + p[1].toFixed(5)).join(';') + ';r=' + CORRIDOR_R;
+}
+function bounds(routes){
+  let s = 90, w = 180, n = -90, e = -180;
+  for (const r of routes) for (const p of r.pts) { s = Math.min(s, p[0]); n = Math.max(n, p[0]); w = Math.min(w, p[1]); e = Math.max(e, p[1]); }
+  const my = Math.max(0.01, (n - s) * 0.25), mx = Math.max(0.015, (e - w) * 0.25);
+  return { s: s - my, n: n + my, w: w - mx, e: e + mx };
+}
+const isDupe = (r, list) => list.some(c => Math.abs(c.len - r.len) < 30 && Math.abs(c.dur - r.dur) < 15);
+
+// ---------- Main ----------
+function status(msg, err){
+  $('status').textContent = msg; $('status').className = err ? 'err' : '';
+  $('summary').textContent = msg;
+  if (err) setSheet(true);
+}
+$('form').addEventListener('submit', async e => {
+  e.preventDefault();
+  if (!key()) { $('keybox').open = true; $('key').focus(); status('Enter your HERE API key first.', true); return; }
+  if (!$('from').value.trim() || !$('to').value.trim()) { status('Enter a start and a destination.', true); return; }
+  const th = +$('th').value, extraS = Math.max(0, +$('extra').value || 0) * 60;
+  const isCoord = v => /^\s*-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?\s*$/.test(v);
+  const geocodes = [$('from').value, $('to').value].filter(v => !isCoord(v)).length;
+  const over = checkSpend({ geocode: geocodes, routing: 1 + ROUNDS, flow: 1 });
+  if (over) { status('Comparison not started. ' + over, true); return; }
+  $('go').disabled = true;
+  try {
+    status('Finding locations…');
+    const o = await locate($('from').value), d = await locate($('to').value);
+    setMark('from', o.lat, o.lng); setMark('to', d.lat, d.lng);
+
+    status('Getting HERE routes…');
+    const cands = (await getRoutes(o, d, 5, [])).map((r, i) => ({ ...r, label: i ? 'HERE alternative ' + i : 'HERE fastest' }));
+    if (!cands.length) throw new Error('HERE returned no route between these points.');
+
+    status('Getting live traffic…');
+    const box = bounds(cands);
+    const idx = buildIndex(await getFlow(box));
+    cands.forEach(c => c.s = score(c, idx, th));
+
+    // Round 1 routes around the congestion on the fastest route; later rounds route around
+    // any congestion the previous avoidance route still runs through.
+    const avoid = new Map();
+    let target = cands[0];
+    for (let round = 1; round <= ROUNDS; round++) {
+      const fresh = [...target.s.hit.entries()].filter(([it]) => !avoid.has(it)).sort((a, b) => b[1] * b[0].jf - a[1] * a[0].jf);
+      if (!fresh.length || avoid.size >= MAX_AVOID) break;
+      for (const [it] of fresh) { if (avoid.size >= MAX_AVOID) break; avoid.set(it, corridor(it)); }
+      status('Routing around ' + avoid.size + (avoid.size === 1 ? ' congested stretch' : ' congested stretches') + ' (round ' + round + ')…');
+      let rs;
+      try { rs = await getRoutes(o, d, 3, [...avoid.values()]); }
+      catch (err) { status('Avoidance round ' + round + ' failed: ' + err.message, true); break; }
+      if (!rs.length) break;
+      rs.forEach(r => r.s = score(r, idx, th));
+      rs.forEach((r, i) => { if (!isDupe(r, cands)) { r.label = 'Avoiding ' + avoid.size + (avoid.size === 1 ? ' stretch' : ' stretches') + (i ? ' (alt ' + i + ')' : ''); cands.push(r); } });
+      target = rs[0];
+    }
+
+    const fastest = cands.reduce((a, b) => b.dur < a.dur ? b : a);
+    const best = choose(cands, fastest.dur, extraS);
+    lastRun = { cands, fastest, best, idx, th, extraS };
+    render(best, true);
+    setSheet(false);
+    status('Done. Traffic data covers ' + idx.items.length + ' road stretches at jam factor ' + MIN_JF + ' or above.');
+    $('summary').textContent = best === fastest
+      ? 'Fastest route: ' + fmtT(fastest.dur) + ', ' + km(fastest.s.cong) + ' in congestion'
+      : 'Chosen: ' + fmtT(best.dur) + ' (+' + fmtT(Math.max(0, best.dur - fastest.dur)) + '), ' + km(best.s.cong) + ' in congestion';
+  } catch (err) {
+    status(err.message || String(err), true);
+  } finally {
+    $('go').disabled = false;
+  }
+});
+
+// ---------- Rendering ----------
+const fmtT = s => { const m = Math.round(s / 60); return m < 60 ? m + ' min' : Math.floor(m / 60) + ' h ' + (m % 60) + ' min'; };
+const km = m => (m / 1000).toFixed(1) + ' km';
+const jamColour = jf => jf >= 8 ? '#8b0000' : jf >= 6 ? '#e8251a' : jf >= 4 ? '#f08a00' : '#f2c200';
+
+function card(title, r, ref, cls){
+  const pct = r.s.tot ? Math.round(100 * r.s.cong / r.s.tot) : 0, dt = r.dur - ref.dur;
+  return `<div class="card ${cls}"><p class="muted">${title}</p><div class="big">${fmtT(r.dur)}</div><dl>
+    <dt>Distance</dt><dd>${km(r.len)}</dd>
+    <dt>In congestion</dt><dd>${km(r.s.cong)} (${pct}%)</dd>
+    <dt>Vs fastest</dt><dd>${dt <= 30 ? 'same' : '+' + fmtT(dt)}</dd></dl></div>`;
+}
+function render(selected, fit){
+  const { cands, fastest, best, idx, th, extraS } = lastRun;
+  if (layers) map.removeLayer(layers);
+  layers = L.layerGroup().addTo(map);
+  for (const it of idx.items) for (const pts of it.links) L.polyline(pts, { color: jamColour(it.jf), weight: 3, opacity: .85, interactive: false }).addTo(layers);
+  for (const c of cands) if (c !== fastest && c !== selected) L.polyline(c.pts, { color: '#6b7680', weight: 3, opacity: .35, interactive: false }).addTo(layers);
+  L.polyline(fastest.pts, { color: '#6b7680', weight: 6, dashArray: '8 8', opacity: .9 }).addTo(layers);
+  L.polyline(selected.pts, { color: '#fff', weight: 9, opacity: .9 }).addTo(layers);
+  L.polyline(selected.pts, { color: '#1f6feb', weight: 5 }).addTo(layers);
+  if (fit) map.fitBounds(L.latLngBounds(cands.flatMap(c => c.pts)).pad(0.05));
+
+  const saved = fastest.s.cong - best.s.cong;
+  $('verdict').textContent = best === fastest
+    ? 'The fastest route is already the least congested option within ' + Math.round(extraS / 60) + ' extra minutes.'
+    : 'The chosen route spends ' + km(saved) + ' less in congestion for ' + fmtT(Math.max(0, best.dur - fastest.dur)) + ' extra.';
+  $('cards').innerHTML = card('Fastest', fastest, fastest, '') + card(selected === best ? 'Least congested' : 'Selected', selected, fastest, 'best');
+  $('tbody').innerHTML = cands.map((c, i) => `<tr data-i="${i}" class="${c === selected ? 'sel' : ''}"><td>${c.label}${c === best ? ' (chosen)' : ''}${c.dur > fastest.dur + extraS ? ' (over limit)' : ''}</td><td>${fmtT(c.dur)}</td><td>${km(c.len)}</td><td>${km(c.s.cong)}</td></tr>`).join('');
+  $('results').hidden = false;
+}
+$('tbody').addEventListener('click', e => { const tr = e.target.closest('tr'); if (tr && lastRun) render(lastRun.cands[+tr.dataset.i]); });
+}
+</script>
+</body>
+</html>
