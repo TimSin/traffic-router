@@ -38,6 +38,9 @@ label{display:block;font-size:13px;color:var(--muted);margin-bottom:4px}
 .row{display:flex;gap:8px;align-items:stretch}
 input,select,button{font:inherit;font-size:16px;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:6px;min-height:44px;padding:0 10px}
 input,select{width:100%}
+/* Fixed heights so text inputs and dropdowns match; iOS ignores min-height on a native dropdown. */
+input:not([type=checkbox]),select{height:48px;line-height:normal}
+select{-webkit-appearance:none;appearance:none;padding-right:38px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239aa4ad' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;background-size:18px}
 .row>input{flex:1 1 0;width:auto}
 .row>button{flex:none;min-width:max-content}
 .row>button.primary{flex:1 1 0;width:auto}
@@ -84,7 +87,7 @@ tbody tr.sel{outline:2px solid var(--blue);outline-offset:-2px}
   border:1px solid var(--line);border-radius:10px;padding:2px 4px 2px 12px;position:relative}
 .trip .field{display:flex;align-items:center;gap:2px;min-height:48px}
 .trip .field:first-of-type{border-bottom:1px solid var(--line)}
-.trip input{border:0;background:none;padding:0 4px;min-height:44px;flex:1 1 0;width:auto}
+.trip input{border:0;background:none;padding:0 4px;height:44px;min-height:44px;flex:1 1 0;width:auto}
 .trip input:focus-visible{outline:none}
 .trip .field:focus-within{box-shadow:inset 0 -2px 0 var(--blue)}
 .dot{width:12px;height:12px;border-radius:50%;justify-self:center}
@@ -256,7 +259,7 @@ $('extra').addEventListener('input', optsSummary);
 optsSummary();
 
 // ---------- Reload and version ----------
-const APP_VERSION = '2026-11-21.7';
+const APP_VERSION = '2026-11-21.8';
 $('version').textContent = 'Version ' + APP_VERSION + '.';
 // Re-requesting the page with cache: 'reload' replaces the browser's cached copy before reloading.
 $('reload').addEventListener('click', () => {
