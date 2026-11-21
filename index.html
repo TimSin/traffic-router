@@ -68,6 +68,11 @@ tbody tr.sel{outline:2px solid var(--blue);outline-offset:-2px}
 #usagenote.err{color:var(--red)}
 #map{height:100%;width:100%}
 .view{display:flex;flex-direction:column;gap:inherit}
+.settings-panel{position:fixed;top:0;right:0;bottom:0;width:min(420px,100%);z-index:1200;background:var(--panel);color:var(--ink);
+  overflow-y:auto;-webkit-overflow-scrolling:touch;padding:20px 20px calc(28px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:18px;
+  border-left:1px solid var(--line);box-shadow:-6px 0 24px rgba(0,0,0,.3)}
+.settings-panel[hidden]{display:none}
+.settings-panel .titlebar{position:sticky;top:-20px;background:var(--panel);padding:12px 0 8px;margin-top:-12px;z-index:1}
 .view[hidden]{display:none}
 .titlebar{display:flex;justify-content:space-between;align-items:center;gap:10px}
 .cog{position:fixed;top:12px;right:12px;z-index:1100;width:48px;height:48px;padding:0;border-radius:50%;display:grid;place-items:center;
@@ -141,6 +146,10 @@ tr.over td{opacity:.45}
   #map{position:fixed;inset:0;height:auto}
   aside{position:fixed;left:0;right:0;bottom:0;z-index:1000;max-height:78dvh;border-right:0;border-top:1px solid var(--line);border-radius:14px 14px 0 0;box-shadow:0 -4px 20px rgba(0,0,0,.25);padding:0 16px calc(20px + env(safe-area-inset-bottom));gap:16px}
   aside.collapsed{overflow:hidden;max-height:calc(57px + env(safe-area-inset-bottom))}
+  @media (orientation: portrait){
+    .sheet-bar{padding-bottom:14px}
+    aside.collapsed{max-height:calc(65px + env(safe-area-inset-bottom))}
+  }
   .sheet-bar{display:flex;position:sticky;top:0;z-index:1;width:calc(100% + 32px);background:var(--panel);align-items:center;gap:10px;min-height:56px;margin:0 -16px;padding:14px 16px 6px;border:0;border-bottom:1px solid var(--line);border-radius:14px 14px 0 0;text-align:left}
   .sheet-bar .grab{position:absolute;top:6px;left:50%;width:40px;height:4px;margin-left:-20px;border-radius:2px;background:var(--line)}
   aside.collapsed .sheet-bar .chev{transform:rotate(180deg)}
@@ -159,58 +168,6 @@ tr.over td{opacity:.45}
     <p class="muted">Compares HERE's fastest route with the least congested route within your extra-time limit.</p>
   </div>
 
-  <section id="settings" class="view" hidden>
-    <div class="titlebar"><h2>Settings</h2><button type="button" id="settingsDone">Done</button></div>
-    <div>
-      <h3>HERE API key</h3>
-      <label for="key">Key</label>
-      <input id="key" type="password" autocomplete="off" spellcheck="false">
-      <p class="muted" style="margin-top:6px"><label style="display:inline;margin:0"><input id="remember" type="checkbox" style="width:auto;min-height:0;vertical-align:middle"> Remember in this browser</label></p>
-      <p id="keymsg" class="muted" style="margin-top:6px"></p>
-    </div>
-    <p class="muted">The key is used only for requests from this page to HERE. If you tick "Remember in this browser", it is kept in this browser's local storage and nowhere else. You can create a key at <a href="https://platform.here.com">platform.here.com</a>.</p>
-    <div>
-      <h3>Base map</h3>
-      <label for="basemap">Map background</label>
-      <select id="basemap">
-        <option value="tracestrack">Tracestrack Topo</option>
-        <option value="osm">OpenStreetMap</option>
-        <option value="here">HERE (counts against your allowance)</option>
-      </select>
-      <div id="ttbox" style="margin-top:10px">
-        <label for="ttkey">Tracestrack API key</label>
-        <input id="ttkey" type="password" autocomplete="off" spellcheck="false">
-        <p class="muted" id="basenote" style="margin-top:6px"></p>
-      </div>
-    </div>
-    <div>
-      <h3>Favourites</h3>
-      <div id="favlist"></div>
-    </div>
-    <div>
-      <h3>Free allowance limit</h3>
-      <div class="grid2">
-        <div><label for="plan">HERE plan</label>
-          <select id="plan">
-            <option value="base">Base (monthly)</option>
-            <option value="limited">Limited (daily)</option>
-          </select></div>
-        <div><label for="pct">Stop at % of allowance</label><input id="pct" type="number" min="10" max="100" step="5" value="90"></div>
-      </div>
-      <div id="meters" style="margin-top:12px"></div>
-      <p class="muted" id="usagenote" style="margin-top:8px"></p>
-    </div>
-    <div>
-      <h3>Screen</h3>
-      <label class="check"><input id="keepon" type="checkbox"> Keep the screen on while the app is open</label>
-      <p class="muted" id="keepnote" style="margin-top:6px">Stops the phone dimming and locking while the app is in front. Uses more battery. On iPhone this needs iOS 18.4 or later.</p>
-    </div>
-    <div>
-      <h3>App</h3>
-      <button type="button" id="reload">Reload app</button>
-      <p class="muted" style="margin-top:6px">Fetches the latest version of the page. Your key and settings are kept. <span id="version"></span></p>
-    </div>
-  </section>
 
   <div id="mainview" class="view">
   <p id="status" role="status"></p>
@@ -270,6 +227,58 @@ tr.over td{opacity:.45}
   </div>
 </aside>
 <div id="map"></div>
+<section id="settings" class="settings-panel" hidden role="dialog" aria-modal="true" aria-label="Settings">
+    <div class="titlebar"><h2 id="settingsTitle">Settings</h2><button type="button" id="settingsDone">Done</button></div>
+    <div>
+      <h3>HERE API key</h3>
+      <label for="key">Key</label>
+      <input id="key" type="password" autocomplete="off" spellcheck="false">
+      <p class="muted" style="margin-top:6px"><label style="display:inline;margin:0"><input id="remember" type="checkbox" style="width:auto;min-height:0;vertical-align:middle"> Remember in this browser</label></p>
+      <p id="keymsg" class="muted" style="margin-top:6px"></p>
+    </div>
+    <p class="muted">The key is used only for requests from this page to HERE. If you tick "Remember in this browser", it is kept in this browser's local storage and nowhere else. You can create a key at <a href="https://platform.here.com">platform.here.com</a>.</p>
+    <div>
+      <h3>Base map</h3>
+      <label for="basemap">Map background</label>
+      <select id="basemap">
+        <option value="tracestrack">Tracestrack Topo</option>
+        <option value="osm">OpenStreetMap</option>
+        <option value="here">HERE (counts against your allowance)</option>
+      </select>
+      <div id="ttbox" style="margin-top:10px">
+        <label for="ttkey">Tracestrack API key</label>
+        <input id="ttkey" type="password" autocomplete="off" spellcheck="false">
+        <p class="muted" id="basenote" style="margin-top:6px"></p>
+      </div>
+    </div>
+    <div>
+      <h3>Favourites</h3>
+      <div id="favlist"></div>
+    </div>
+    <div>
+      <h3>Free allowance limit</h3>
+      <div class="grid2">
+        <div><label for="plan">HERE plan</label>
+          <select id="plan">
+            <option value="base">Base (monthly)</option>
+            <option value="limited">Limited (daily)</option>
+          </select></div>
+        <div><label for="pct">Stop at % of allowance</label><input id="pct" type="number" min="10" max="100" step="5" value="90"></div>
+      </div>
+      <div id="meters" style="margin-top:12px"></div>
+      <p class="muted" id="usagenote" style="margin-top:8px"></p>
+    </div>
+    <div>
+      <h3>Screen</h3>
+      <label class="check"><input id="keepon" type="checkbox"> Keep the screen on while the app is open</label>
+      <p class="muted" id="keepnote" style="margin-top:6px">Stops the phone dimming and locking while the app is in front. Uses more battery. On iPhone this needs iOS 18.4 or later.</p>
+    </div>
+    <div>
+      <h3>App</h3>
+      <button type="button" id="reload">Reload app</button>
+      <p class="muted" style="margin-top:6px">Fetches the latest version of the page. Your key and settings are kept. <span id="version"></span></p>
+    </div>
+  </section>
 <button type="button" id="recalc" class="cog recalc" aria-label="Recalculate route" title="Recalculate with the same inputs" disabled><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg></button>
 <button type="button" id="mylocation" class="cog locbtn" aria-label="Show my location" aria-pressed="false" title="Show my location"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg></button>
 <button type="button" id="cog" class="cog" aria-label="Settings" aria-pressed="false" aria-controls="settings"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
@@ -369,7 +378,7 @@ $('favok').addEventListener('click', async () => {
   const name = $('favname').value.trim(), text = $(favWhich).value.trim();
   if (!name) { status('Give the favourite a name.', true); return; }
   if (!text) { status('That field is empty.', true); return; }
-  if (!key() && !/^-?\d/.test(text)) { showSettings(true, 'Enter your HERE API key first, so the address can be looked up.'); return; }
+  if (!key() && !/^-?\d/.test(text)) { status(NEED_KEY, true); return; }
   try {
     const p = await locate(text, favWhich);
     favs = favs.filter(f => f.name.toLowerCase() !== name.toLowerCase());
@@ -382,7 +391,7 @@ $('favok').addEventListener('click', async () => {
 renderFavs();
 
 // ---------- Reload and version ----------
-const APP_VERSION = '2026-11-21.12';
+const APP_VERSION = '2026-11-21.13';
 $('version').textContent = 'Version ' + APP_VERSION + '.';
 // Re-requesting the page with cache: 'reload' replaces the browser's cached copy before reloading.
 $('reload').addEventListener('click', () => {
@@ -391,16 +400,18 @@ $('reload').addEventListener('click', () => {
 });
 
 // ---------- Settings view ----------
-function showSettings(on, msg){
+// Settings open only from the cog, in their own panel over the map; the bottom panel is only for routing.
+function showSettings(on){
   $('settings').hidden = !on;
-  $('mainview').hidden = on;
   $('cog').setAttribute('aria-pressed', String(on));
-  $('keymsg').textContent = msg || '';
-  $('keymsg').className = msg ? 'muted err' : 'muted';
-  if (on) { setSheet(true); $('key').focus(); }
+  $('keymsg').textContent = !key() ? 'Enter your HERE API key to use the app.' : '';
+  $('keymsg').className = !key() ? 'muted err' : 'muted';
+  if (on) $('settingsDone').focus(); else $('cog').focus();
 }
 $('cog').addEventListener('click', () => showSettings($('settings').hidden));
 $('settingsDone').addEventListener('click', () => showSettings(false));
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('settings').hidden) showSettings(false); });
+const NEED_KEY = 'Add your HERE API key in Settings, using the cog at the top right.';
 
 // ---------- Free allowance limit ----------
 // Counts every request this page makes, by service, for the current UTC calendar month and UTC day.
@@ -567,7 +578,7 @@ document.querySelectorAll('.pick').forEach(b => b.addEventListener('click', () =
   if (phone.matches) setSheet(!picking);
 }));
 map.on('click', e => {
-  if (!picking) return;
+  if (!picking) { if (phone.matches) setSheet(false); return; }
   $(picking).value = e.latlng.lat.toFixed(5) + ', ' + e.latlng.lng.toFixed(5);
   setMark(picking, e.latlng.lat, e.latlng.lng);
   picking = null;
@@ -649,7 +660,7 @@ $('mylocation').addEventListener('click', () => {
   else stopTracking();
   setLocBtn();
 });
-map.on('dragstart', () => { if (follow) { follow = false; setLocBtn(); } });
+map.on('dragstart', () => { if (follow) { follow = false; setLocBtn(); } if (phone.matches && !picking) setSheet(false); });
 // Resume showing the position on load if it was on last time and permission is already granted, so no prompt appears.
 if (store.get('track') === '1' && navigator.permissions && navigator.geolocation) {
   navigator.permissions.query({ name: 'geolocation' }).then(r => { if (r.state === 'granted') startTracking(); }).catch(() => {});
@@ -824,7 +835,7 @@ function status(msg, err){
 let lastInputs = null;
 $('form').addEventListener('submit', e => { e.preventDefault(); run(); });
 async function run(){
-  if (!key()) { showSettings(true, 'Enter your HERE API key first.'); return; }
+  if (!key()) { status(NEED_KEY, true); return; }
   if (!$('from').value.trim() || !$('to').value.trim()) { status('Enter a start and a destination.', true); return; }
   const th = +$('th').value, extraS = Math.max(0, +$('extra').value || 0) * 60;
   const isCoord = v => /^\s*-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?\s*$/.test(v);
@@ -926,7 +937,7 @@ function render(selected, fit){
   $('tbody').innerHTML = cands.map((c, i) => `<tr data-i="${i}" class="${c === selected ? 'sel' : ''}${c.dur > fastest.dur + extraS ? ' over' : ''}"><td>${c.label}${c === best ? ' <span class="tag">Chosen</span>' : ''}</td><td>${fmtT(c.dur)}</td><td>${km(c.len)}</td><td>${km(c.s.cong)}</td></tr>`).join('');
   $('results').hidden = false;
 }
-if (!key()) showSettings(true, 'Enter your HERE API key to start.');
+if (!key()) status(NEED_KEY);
 $('tbody').addEventListener('click', e => { const tr = e.target.closest('tr'); if (tr && lastRun) render(lastRun.cands[+tr.dataset.i]); });
 }
 </script>
