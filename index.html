@@ -74,6 +74,10 @@ tbody tr.sel{outline:2px solid var(--blue);outline-offset:-2px}
   background:var(--panel);color:var(--ink);border:1px solid var(--line);box-shadow:0 2px 10px rgba(0,0,0,.25)}
 .cog[aria-pressed=true]{background:var(--blue);border-color:var(--blue);color:#fff}
 .recalc{right:auto;left:412px}
+.locbtn{top:72px}
+.locbtn.tracking{color:var(--blue)}
+.check{display:flex;align-items:center;gap:10px;font-size:15px;color:var(--ink);margin:0}
+.check input{width:22px;height:22px;min-height:0;margin:0;flex:none}
 .recalc:disabled{opacity:.5;cursor:default}
 @media(prefers-reduced-motion:no-preference){.recalc.busy svg{animation:spin 1s linear infinite}}
 @keyframes spin{to{transform:rotate(360deg)}}
@@ -197,6 +201,11 @@ tr.over td{opacity:.45}
       <p class="muted" id="usagenote" style="margin-top:8px"></p>
     </div>
     <div>
+      <h3>Screen</h3>
+      <label class="check"><input id="keepon" type="checkbox"> Keep the screen on while the app is open</label>
+      <p class="muted" id="keepnote" style="margin-top:6px">Stops the phone dimming and locking while the app is in front. Uses more battery. On iPhone this needs iOS 18.4 or later.</p>
+    </div>
+    <div>
       <h3>App</h3>
       <button type="button" id="reload">Reload app</button>
       <p class="muted" style="margin-top:6px">Fetches the latest version of the page. Your key and settings are kept. <span id="version"></span></p>
@@ -262,6 +271,7 @@ tr.over td{opacity:.45}
 </aside>
 <div id="map"></div>
 <button type="button" id="recalc" class="cog recalc" aria-label="Recalculate route" title="Recalculate with the same inputs" disabled><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg></button>
+<button type="button" id="mylocation" class="cog locbtn" aria-label="Show my location" aria-pressed="false" title="Show my location"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg></button>
 <button type="button" id="cog" class="cog" aria-label="Settings" aria-pressed="false" aria-controls="settings"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
@@ -372,7 +382,7 @@ $('favok').addEventListener('click', async () => {
 renderFavs();
 
 // ---------- Reload and version ----------
-const APP_VERSION = '2026-11-21.11';
+const APP_VERSION = '2026-11-21.12';
 $('version').textContent = 'Version ' + APP_VERSION + '.';
 // Re-requesting the page with cache: 'reload' replaces the browser's cached copy before reloading.
 $('reload').addEventListener('click', () => {
@@ -580,6 +590,13 @@ phone.addEventListener('change', () => { setSheet(true); });
 // ---------- Current location ----------
 $('locate').addEventListener('click', () => {
   if (!navigator.geolocation) { status('This browser cannot provide your location.', true); return; }
+  // Use the position already shown on the map if it is less than a minute old.
+  if (fix && Date.now() - fix.t < 60000) {
+    $('from').value = fix.lat.toFixed(5) + ', ' + fix.lng.toFixed(5);
+    setMark('from', fix.lat, fix.lng);
+    status('Start set to your location, accurate to about ' + Math.round(fix.acc) + ' m.');
+    return;
+  }
   status('Finding your location…');
   navigator.geolocation.getCurrentPosition(p => {
     const lat = p.coords.latitude, lng = p.coords.longitude;
@@ -591,6 +608,79 @@ $('locate').addEventListener('click', () => {
     status(err.code === 1 ? 'Location access was refused. You can allow it for this site in your browser or phone settings.' : 'Could not get your location: ' + err.message, true);
   }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 });
 });
+
+// ---------- Live position on the map ----------
+// Off -> following (map keeps the dot centred) -> showing only once the map is dragged -> tap to follow again.
+// Tapping while following turns it off.
+let watchId = null, follow = false, fix = null, meDot = null, meAcc = null;
+function setLocBtn(){
+  $('mylocation').setAttribute('aria-pressed', String(watchId !== null && follow));
+  $('mylocation').classList.toggle('tracking', watchId !== null && !follow);
+  $('mylocation').setAttribute('aria-label', watchId === null ? 'Show my location' : follow ? 'Stop showing my location' : 'Centre on my location');
+}
+function onFix(p){
+  fix = { lat: p.coords.latitude, lng: p.coords.longitude, acc: p.coords.accuracy, t: Date.now() };
+  const ll = [fix.lat, fix.lng];
+  if (!meDot) {
+    meAcc = L.circle(ll, { radius: fix.acc, color: '#1f6feb', weight: 1, opacity: .4, fillOpacity: .12, interactive: false }).addTo(map);
+    meDot = L.circleMarker(ll, { radius: 7, color: '#fff', weight: 3, fillColor: '#1f6feb', fillOpacity: 1, interactive: false }).addTo(map);
+  } else { meAcc.setLatLng(ll).setRadius(fix.acc); meDot.setLatLng(ll); meDot.bringToFront(); }
+  if (follow) map.setView(ll, Math.max(map.getZoom(), 15));
+}
+function startTracking(){
+  if (!navigator.geolocation) { status('This browser cannot provide your location.', true); return; }
+  watchId = navigator.geolocation.watchPosition(onFix, err => {
+    status(err.code === 1 ? 'Location access was refused. You can allow it for this site in your browser or phone settings.' : 'Could not get your location: ' + err.message, true);
+    stopTracking();
+  }, { enableHighAccuracy: true, maximumAge: 5000, timeout: 30000 });
+  store.set('track', '1');
+  setLocBtn();
+}
+function stopTracking(){
+  if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+  watchId = null; follow = false;
+  if (meDot) { map.removeLayer(meDot); map.removeLayer(meAcc); meDot = meAcc = null; }
+  store.set('track', null);
+  setLocBtn();
+}
+$('mylocation').addEventListener('click', () => {
+  if (watchId === null) { follow = true; startTracking(); }
+  else if (!follow) { follow = true; if (fix) map.setView([fix.lat, fix.lng], Math.max(map.getZoom(), 15)); }
+  else stopTracking();
+  setLocBtn();
+});
+map.on('dragstart', () => { if (follow) { follow = false; setLocBtn(); } });
+// Resume showing the position on load if it was on last time and permission is already granted, so no prompt appears.
+if (store.get('track') === '1' && navigator.permissions && navigator.geolocation) {
+  navigator.permissions.query({ name: 'geolocation' }).then(r => { if (r.state === 'granted') startTracking(); }).catch(() => {});
+}
+
+// ---------- Keep the screen on ----------
+// A screen wake lock is released whenever the app goes to the background, so it is requested again on return.
+let wakeLock = null;
+const keepOn = () => $('keepon').checked;
+async function applyWakeLock(){
+  if (!('wakeLock' in navigator)) {
+    if (keepOn()) $('keepnote').textContent = 'This browser cannot keep the screen on. On iPhone this needs iOS 18.4 or later.';
+    return;
+  }
+  if (keepOn() && document.visibilityState === 'visible') {
+    if (wakeLock && !wakeLock.released) return;
+    try {
+      wakeLock = await navigator.wakeLock.request('screen');
+      $('keepnote').textContent = 'The screen will stay on while the app is open. Uses more battery.';
+    } catch (err) {
+      $('keepnote').textContent = 'The screen could not be kept on yet. It will try again when you next tap the app.';
+    }
+  } else if (wakeLock) {
+    wakeLock.release().catch(() => {}); wakeLock = null;
+  }
+}
+$('keepon').checked = store.get('keepOn') === '1';
+$('keepon').addEventListener('change', () => { store.set('keepOn', keepOn() ? '1' : null); applyWakeLock(); });
+document.addEventListener('visibilitychange', applyWakeLock);
+document.addEventListener('pointerdown', () => { if (keepOn() && (!wakeLock || wakeLock.released)) applyWakeLock(); });
+applyWakeLock();
 
 // ---------- Geometry ----------
 const R2D = 180 / Math.PI, D2R = Math.PI / 180;
@@ -822,7 +912,8 @@ function render(selected, fit){
   L.polyline(selected.pts, { color: '#fff', weight: 10, opacity: .95 }).addTo(layers);
   L.polyline(selected.pts, { color: '#1f6feb', weight: 6 }).addTo(layers);
   // Fit to the two routes shown, leaving room for the buttons at the top and the bottom panel on a phone.
-  if (fit) map.fitBounds(L.latLngBounds(fastest.pts.concat(selected.pts)), { paddingTopLeft: [24, 76], paddingBottomRight: [24, phone.matches ? 90 : 40] });
+  if (fit) { follow = false; setLocBtn(); map.fitBounds(L.latLngBounds(fastest.pts.concat(selected.pts)), { paddingTopLeft: [24, 76], paddingBottomRight: [24, phone.matches ? 90 : 40] }); }
+  if (meDot) meDot.bringToFront();
 
   const saved = fastest.s.cong - best.s.cong;
   $('verdict').textContent = best === fastest
