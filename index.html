@@ -141,6 +141,14 @@ tbody tr.sel{outline:2px solid var(--blue);outline-offset:-2px}
     </div>
   </div>
 
+  <div>
+    <label for="basemap">Base map</label>
+    <select id="basemap">
+      <option value="osm">OpenStreetMap</option>
+      <option value="here">HERE (counts against your allowance)</option>
+    </select>
+  </div>
+
   <details id="usagebox" open>
     <summary>Free allowance limit</summary>
     <div class="grid2">
@@ -246,7 +254,7 @@ function renderUsage(){
     const u = loadUsage();
     $('meters').innerHTML = plan() === 'limited'
       ? meter('All requests today', sum(u.day.c), Math.floor(DAILY * share()))
-      : Object.keys(ALLOW).map(s => meter(NAMES[s] + ' this month', u.month.c[s] || 0, Math.floor(ALLOW[s] * share()))).join('');
+      : Object.keys(ALLOW).filter(s => s !== 'tiles' || basemap() === 'here').map(s => meter(NAMES[s] + ' this month', u.month.c[s] || 0, Math.floor(ALLOW[s] * share()))).join('');
     const note = $('usagenote');
     note.className = storageOK ? 'muted' : 'muted err';
     note.textContent = (storageOK
@@ -280,8 +288,20 @@ const GuardedTiles = L.TileLayer.extend({
     return L.TileLayer.prototype.createTile.call(this, coords, done);
   }
 });
+// OpenStreetMap's standard tiles are free for light use but must be requested with a Referer header,
+// which browsers send from a hosted page but not from a file opened directly from disk.
+const basemap = () => $('basemap').value;
+const savedBase = store.get('hereBasemap');
+if (savedBase) $('basemap').value = savedBase;
+$('basemap').addEventListener('change', () => { store.set('hereBasemap', basemap()); setTiles(); renderUsage(); });
+map.attributionControl.addAttribution('Routing and traffic &copy; HERE');
 function setTiles(){
   if (tiles) { map.removeLayer(tiles); tiles = null; }
+  if (basemap() === 'osm') {
+    tiles = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' }).addTo(map);
+    return;
+  }
   if (!key()) return;
   tiles = new GuardedTiles('https://maps.hereapi.com/v3/base/mc/{z}/{x}/{y}/png?style=lite.day&size=512&apiKey=' + encodeURIComponent(key()),
     { tileSize: 512, zoomOffset: -1, maxZoom: 19, attribution: '&copy; HERE' }).addTo(map);
