@@ -131,6 +131,11 @@ tbody tr.sel{outline:2px solid var(--blue);outline-offset:-2px}
       <div id="meters" style="margin-top:12px"></div>
       <p class="muted" id="usagenote" style="margin-top:8px"></p>
     </div>
+    <div>
+      <h3>App</h3>
+      <button type="button" id="reload">Reload app</button>
+      <p class="muted" style="margin-top:6px">Fetches the latest version of the page. Your key and settings are kept. <span id="version"></span></p>
+    </div>
   </section>
 
   <div id="mainview" class="view">
@@ -210,6 +215,15 @@ function persistKey(){ store.set('hereKey', $('remember').checked && key() ? key
 $('key').addEventListener('change', () => { persistKey(); setTiles(); });
 $('remember').addEventListener('change', persistKey);
 $('key').addEventListener('input', () => { $('keymsg').textContent = ''; $('keymsg').className = 'muted'; });
+
+// ---------- Reload and version ----------
+const APP_VERSION = '2026-11-21.6';
+$('version').textContent = 'Version ' + APP_VERSION + '.';
+// Re-requesting the page with cache: 'reload' replaces the browser's cached copy before reloading.
+$('reload').addEventListener('click', () => {
+  $('reload').disabled = true; $('reload').textContent = 'Reloading…';
+  fetch(location.href.split('#')[0], { cache: 'reload' }).catch(() => {}).finally(() => location.reload());
+});
 
 // ---------- Settings view ----------
 function showSettings(on, msg){
